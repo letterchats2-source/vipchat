@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VIPCHAT Transroom</title>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; }
+        #video-container { width: 100vw; height: 100vh; position: relative; }
+        #local-video { width: 120px; height: 160px; position: absolute; top: 10px; right: 10px; z-index: 10; background: #222; border-radius: 8px; }
+        #remote-video { width: 100%; height: 100%; background: #000; }
+        #controls { position: absolute; bottom: 30px; width: 100%; text-align: center; z-index: 20; }
+        button { padding: 15px 30px; border-radius: 50px; border: none; background: #8E24AA; color: white; font-size: 18px; }
+        #subtitle { position: absolute; bottom: 100px; width: 100%; text-align: center; background: rgba(0,0,0,0.5); padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="video-container">
+        <div id="local-video"></div>
+        <div id="remote-video"></div>
+        <div id="subtitle">Çeviri bekleniyor...</div>
+        <div id="controls">
+            <button onclick="startSTT()">🎤 Konuş ve Çevir</button>
+        </div>
+    </div>
+
+    <script>
+        const APP_ID = "BURAYA_AGORA_APP_ID_YAZ";
+        const urlParams = new URLSearchParams(window.location.search);
+        const CHANNEL = window.location.pathname.split('/').pop() || "test";
+
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        let localTracks = { videoTrack: null, audioTrack: null };
+
+        async function startCall() {
+            client.on("user-published", async (user, mediaType) => {
+                await client.subscribe(user, mediaType);
+                if (mediaType === "video") {
+                    user.videoTrack.play("remote-video");
+                }
+                if (mediaType === "audio") {
+                    user.audioTrack.play();
+                }
+            });
+
+            await client.join(APP_ID, CHANNEL, null, null);
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
+            
+            localTracks.videoTrack.play("local-video");
+            await client.publish(Object.values(localTracks));
+        }
+
+        // Web Speech API ile Basit Ses Tanıma
+        function startSTT() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = 'tr-TR';
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById("subtitle").innerText = "Ben: " + text;
+                // Burada karşı tarafa mesaj gönderme (Agora DataStream) eklenebilir
+            };
+            recognition.start();
+        }
+
+        startCall();
+    </script>
+</body>
+</html>
