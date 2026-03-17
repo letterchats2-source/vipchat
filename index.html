@@ -28,13 +28,11 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
-            appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel") || "test",
-            token: null,
-            uid: Math.floor(Math.random() * 10000),
-            myLang: urlParams.get("myLang") || "tr-TR",
-            targetLang: urlParams.get("targetLang") || "English"
-        };
+    appId: "fc667e2e21154602bba044359e5771a9", // Senin Agora App ID
+    channel: urlParams.get("channel") || "test",
+    myLang: urlParams.get("myLang") || "tr-TR",
+    targetLang: urlParams.get("targetLang") || "English"
+};
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
