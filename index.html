@@ -6,36 +6,36 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; }
+        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        #remote-player { width: 100vw; height: 100vh; background: #000; }
         #local-player { 
             width: 100px; height: 140px; position: absolute; top: 20px; right: 20px; 
             border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222;
         }
         #subtitle-box { 
-            position: absolute; bottom: 120px; left: 5%; width: 90%; 
-            text-align: center; background: rgba(0,0,0,0.7); padding: 12px; 
+            position: absolute; bottom: 110px; left: 5%; width: 90%; 
+            text-align: center; background: rgba(0,0,0,0.8); padding: 15px; 
             font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
+            min-height: 20px;
         }
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 12px; color: #777; z-index: 30; }
+        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #fff; background: rgba(0,0,0,0.5); padding: 5px; z-index: 30; }
         #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; z-index: 100; }
-        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 30px; }
+        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 28px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar">Bağlanıyor...</div>
-    <div id="remote-player">Kamera bekleniyor...</div>
+    <div id="status-bar">Sistem Başlatılıyor...</div>
+    <div id="remote-player"></div>
     <div id="local-player"></div>
     <div id="subtitle-box">...</div>
-
     <div id="controls"><button class="btn-end" onclick="leaveCall()">✕</button></div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel")?.trim() || "test", // Boşlukları temizle
+            channel: urlParams.get("channel")?.trim() || "test",
             myLang: urlParams.get("myLang") || "tr-TR",
             targetLang: urlParams.get("targetLang") || "English",
             groqKey: urlParams.get("gKey") || ""
@@ -44,46 +44,53 @@
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
 
-        // 1. Dinleyiciyi sabitle
+        // 1. Dinleyiciyi kanala girmeden ÖNCE hazır et (Çok Kritik!)
         client.on("user-published", async (user, mediaType) => {
+            updateStatus("Karşı taraf yayına başladı...");
             await client.subscribe(user, mediaType);
+            
             if (mediaType === "video") {
-                document.getElementById("remote-player").innerHTML = "";
-                user.videoTrack.play("remote-player");
-                updateStatus("Canlı yayın bağlandı!");
+                const remotePlayerContainer = document.getElementById("remote-player");
+                user.videoTrack.play(remotePlayerContainer);
+                updateStatus("GÖRÜNTÜ BAĞLANDI ✅");
             }
             if (mediaType === "audio") {
                 user.audioTrack.play();
             }
         });
 
+        client.on("user-left", (user) => {
+            updateStatus("Karşı taraf ayrıldı.");
+            leaveCall();
+        });
+
         async function startCall() {
             try {
-                updateStatus("Oda: " + options.channel + " | Cihazlar aranıyor...");
+                updateStatus("Oda: " + options.channel + " | Cihazlar açılıyor...");
                 
-                // Cihazları aç
+                // Cihazları aç (Infinix ve Tablet uyumlu düşük profil)
                 const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-                    {}, { encoderConfig: "240p_1" } // Çözünürlüğü iyice düşürdük ki tablet zorlanmasın
+                    {}, { encoderConfig: "240p_1" } 
                 );
                 localTracks.audioTrack = audioTrack;
                 localTracks.videoTrack = videoTrack;
 
                 // Kanala Katıl
                 await client.join(options.appId, options.channel, null, null);
-                
-                // Görüntüleri Başlat
-                localTracks.videoTrack.play("local-player");
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                updateStatus("Kanala girildi. Yayın başlıyor...");
 
-                updateStatus("BAĞLANTI TAMAM. Oda: " + options.channel);
+                // Kendi görüntünü oynat
+                localTracks.videoTrack.play("local-player");
                 
-                // 2. SES TANIMAYI 3 SANİYE SONRA BAŞLAT (Çakışmayı önler)
-                setTimeout(() => {
-                    startRecognition();
-                }, 3000);
+                // Yayını dünyaya aç
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                updateStatus("YAYININIZ AKTİF 🟢");
+
+                // Ses Tanımayı 4 saniye sonra başlat (Kamera işlemcisi rahatlasın)
+                setTimeout(() => startRecognition(), 4000);
 
             } catch (err) {
-                updateStatus("HATA: " + err.message);
+                updateStatus("BAĞLANTI HATASI: " + err.message);
                 console.error(err);
             }
         }
@@ -102,9 +109,10 @@
                 const text = e.results[e.results.length - 1][0].transcript;
                 if(text.trim()) translateWithGroq(text);
             };
-            rec.onerror = (err) => { if(err.error !== 'no-speech') rec.stop(); };
+            rec.onerror = (e) => { if(e.error !== 'no-speech') console.log("STT Error:", e.error); };
             rec.onend = () => rec.start();
             rec.start();
+            updateStatus("ÇEVİRİ SİSTEMİ AKTİF 🎙️");
         }
 
         async function translateWithGroq(text) {
@@ -115,7 +123,7 @@
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, only result: ${text}` }]
+                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, result only: ${text}` }]
                     })
                 });
                 const data = await response.json();
