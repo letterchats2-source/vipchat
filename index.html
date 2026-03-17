@@ -7,43 +7,23 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #111; z-index: 1; }
-        #local-player { 
-            width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
-            border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222;
-        }
-        #subtitle-box { 
-            position: absolute; bottom: 120px; left: 5%; width: 90%; 
-            text-align: center; background: rgba(0,0,0,0.7); padding: 12px; 
-            font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
-        }
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; z-index: 30; background: rgba(0,0,0,0.5); }
-        #overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 200;
-        }
-        .join-btn { 
-            padding: 20px 40px; font-size: 20px; background: #4CAF50; 
-            color: white; border: none; border-radius: 50px; font-weight: bold;
-        }
-        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; z-index: 100; }
-        .btn-end { width: 60px; height: 60px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 24px; }
+        #remote-player { width: 100vw; height: 100vh; background: #000; }
+        #local-player { width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
+        #subtitle-box { position: absolute; bottom: 110px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 17px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+        .join-btn { padding: 20px 40px; font-size: 20px; background: #28a745; color: white; border: none; border-radius: 50px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <!-- GİRİŞ EKRANI (OTOMATİK OYNATMA ENGELİNİ AŞMAK İÇİN) -->
     <div id="overlay">
-        <h2 id="room-name">Odaya Bağlanılıyor...</h2>
+        <h3 id="info">Oda Hazır</h3>
         <button class="join-btn" onclick="startCall()">GÖRÜŞMEYE KATIL</button>
     </div>
 
-    <div id="status-bar">Bekleniyor...</div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Konuşmalar çevriliyor...</div>
-    <div id="controls"><button class="btn-end" onclick="leaveCall()">✕</button></div>
+    <div id="subtitle-box">...</div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -55,55 +35,46 @@
             groqKey: urlParams.get("gKey") || ""
         };
 
-        document.getElementById("room-name").innerText = "Oda: " + options.channel;
-
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        let localTracks = { videoTrack: null, audioTrack: null };
+        let localTracks = [];
 
-        // Karşı taraf yayınını dinle
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video") {
-                const remoteContainer = document.getElementById("remote-player");
-                user.videoTrack.play(remoteContainer);
-                updateStatus("Canlı görüntü bağlandı ✅");
-            }
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
+            if (mediaType === "video") user.videoTrack.play("remote-player");
+            if (mediaType === "audio") user.audioTrack.play();
         });
 
         async function startCall() {
-            // Butona basınca overlay'i kaldır
             document.getElementById("overlay").style.display = "none";
-            updateStatus("Cihazlar başlatılıyor...");
-
             try {
-                // Mikrofon ve Kamera tek seferde (Tablet için en güvenli yol)
-                const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-                    {}, { encoderConfig: "240p_1" }
-                );
-                localTracks.audioTrack = audioTrack;
-                localTracks.videoTrack = videoTrack;
-
+                // Kamera ve mikrofonu tek tek deniyoruz (Hata yakalamak için)
+                const audio = await AgoraRTC.createMicrophoneAudioTrack();
+                const video = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+                
+                localTracks = [audio, video];
                 await client.join(options.appId, options.channel, null, null);
+                video.play("local-player");
+                await client.publish(localTracks);
                 
-                localTracks.videoTrack.play("local-player");
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-
-                updateStatus("Yayın yapılıyor 🟢");
-                
-                // Ses Tanıma (STT) Başlat
                 startRecognition();
-
             } catch (err) {
-                updateStatus("HATA: " + err.message);
-                alert("Bağlantı kurulamadı, lütfen izinleri kontrol edin.");
+                if (err.code === "NOT_READABLE") {
+                    alert("Kamera şu an meşgul! Lütfen tableti yeniden başlatıp tekrar deneyin.");
+                } else {
+                    alert("Hata: " + err.message);
+                }
+                // Kamera hatası alsa bile sadece sesle girmeyi dene
+                fallbackAudio();
             }
         }
 
-        function updateStatus(msg) {
-            document.getElementById("status-bar").innerText = msg;
+        async function fallbackAudio() {
+            try {
+                const audio = await AgoraRTC.createMicrophoneAudioTrack();
+                await client.join(options.appId, options.channel, null, null);
+                await client.publish(audio);
+                startRecognition();
+            } catch (e) { console.error("Ses de açılamadı"); }
         }
 
         function startRecognition() {
@@ -123,7 +94,7 @@
         async function translateWithGroq(text) {
             if (!options.groqKey) return;
             try {
-                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -131,17 +102,19 @@
                         messages: [{ role: "user", content: `Translate to ${options.targetLang}, result only: ${text}` }]
                     })
                 });
-                const data = await response.json();
+                const data = await res.json();
                 document.getElementById("subtitle-box").innerText = data.choices[0].message.content;
             } catch (err) {}
         }
 
+        // --- ZOMBİ SESLERİ ÖLDÜREN KAPATMA ---
         async function leaveCall() {
-            if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
-            if (localTracks.audioTrack) { localTracks.audioTrack.stop(); localTracks.audioTrack.close(); }
+            localTracks.forEach(track => {
+                track.stop();
+                track.close();
+            });
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
-            else window.location.href = "about:blank";
         }
     </script>
 </body>
