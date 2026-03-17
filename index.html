@@ -48,45 +48,40 @@
         let localTracks = { videoTrack: null, audioTrack: null };
 
         async function startCall() {
-            try {
-                updateStatus("Kamera ve Mikrofon başlatılıyor...");
-                
-                // 1. ÖNCE MEDYAYI OLUŞTUR (İzinleri Al)
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
-                
-                updateStatus("Kanala bağlanılıyor...");
+    try {
+        updateStatus("Medya cihazları kontrol ediliyor...");
+        
+        // Önce Mikrofonu açalım (Genelde sorun çıkarmaz)
+        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack().catch(e => {
+            updateStatus("Mikrofon hatası: " + e.message);
+            return null;
+        });
 
-                // 2. KANALA KATIL (Buradaki token kısmını netleştirdik)
-                // options.appId, options.channel, token (null), uid (null)
-                await client.join(options.appId, options.channel, null, null);
-                
-                // 3. YAYINI BAŞLAT
-                localTracks.videoTrack.play("local-player");
-                await client.publish(Object.values(localTracks));
+        // Kamerayı açmayı deneyelim
+        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack().catch(e => {
+            updateStatus("Kamera açılamadı, sadece sesle devam ediliyor...");
+            return null; // Kamera yoksa null dön
+        });
 
-                updateStatus("Bağlantı başarılı! Kanal: " + options.channel);
+        updateStatus("Kanala bağlanılıyor...");
+        await client.join(options.appId, options.channel, null, null);
 
-                // Karşı tarafı dinle
-                client.on("user-published", async (user, mediaType) => {
-                    await client.subscribe(user, mediaType);
-                    if (mediaType === "video") {
-                        document.getElementById("remote-player").innerHTML = "";
-                        user.videoTrack.play("remote-player");
-                    }
-                    if (mediaType === "audio") {
-                        user.audioTrack.play();
-                    }
-                });
-
-                startRecognition();
-
-            } catch (err) {
-                updateStatus("HATA: " + err.message);
-                console.error(err);
-                // alert("Hata detay: " + err.message);
-            }
+        // Sadece başarılı olan yayınları başlat
+        if (localTracks.videoTrack) {
+            localTracks.videoTrack.play("local-player");
+            await client.publish(localTracks.videoTrack);
         }
+        if (localTracks.audioTrack) {
+            await client.publish(localTracks.audioTrack);
+        }
+
+        updateStatus("Bağlantı aktif.");
+        startRecognition(); // Çeviri motorunu başlat
+
+    } catch (err) {
+        updateStatus("Bağlantı başarısız: " + err.message);
+    }
+}
 
         function updateStatus(msg) {
             document.getElementById("status-bar").innerText = msg;
