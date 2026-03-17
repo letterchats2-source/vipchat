@@ -54,14 +54,12 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
-            appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel") || "test",
-            token: null,
-            uid: null,
-            myLang: urlParams.get("myLang") || "tr-TR",
-            targetLang: urlParams.get("targetLang") || "English",
-            groqKey: "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" // BURAYA KENDİ GROQ KEYİNİ YAZ
-        };
+    appId: "fc667e2e21154602bba044359e5771a9",
+    channel: urlParams.get("channel") || "test",
+    myLang: urlParams.get("myLang") || "tr-TR",
+    targetLang: urlParams.get("targetLang") || "English",
+    groqKey: urlParams.get("gKey") // Anahtarı artık URL'den alacağız
+};
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
