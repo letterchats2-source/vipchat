@@ -1,61 +1,111 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>VIPCHAT Transroom</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TranslateTalk Transroom</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; }
-        #video-container { width: 100vw; height: 100vh; position: relative; }
-        #local-video { width: 120px; height: 160px; position: absolute; top: 10px; right: 10px; z-index: 10; background: #222; border-radius: 8px; }
-        #remote-video { width: 100%; height: 100%; background: #000; }
-        #controls { position: absolute; bottom: 30px; width: 100%; text-align: center; z-index: 20; }
-        button { padding: 15px 30px; border-radius: 50px; border: none; background: #8E24AA; color: white; font-size: 18px; }
-        #subtitle { position: absolute; bottom: 100px; width: 100%; text-align: center; background: rgba(0,0,0,0.5); padding: 10px; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        #remote-player { width: 100vw; height: 100vh; background: #222; }
+        #local-player { width: 30vw; height: 20vh; position: absolute; top: 20px; right: 20px; border-radius: 10px; overflow: hidden; border: 2px solid #fff; }
+        #subtitle-box { position: absolute; bottom: 100px; left: 0; width: 100%; text-align: center; background: rgba(0,0,0,0.6); padding: 15px; font-size: 20px; min-height: 50px; }
+        #controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: center; gap: 20px; }
+        .btn { padding: 15px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; }
+        .end-btn { background: #ff4444; color: white; }
     </style>
 </head>
 <body>
-    <div id="video-container">
-        <div id="local-video"></div>
-        <div id="remote-video"></div>
-        <div id="subtitle">Çeviri bekleniyor...</div>
-        <div id="controls">
-            <button onclick="startSTT()">🎤 Konuş ve Çevir</button>
-        </div>
+
+    <div id="remote-player"></div>
+    <div id="local-player"></div>
+    <div id="subtitle-box">Çeviri bekleniyor...</div>
+
+    <div id="controls">
+        <button class="btn end-btn" onclick="leaveCall()">✕</button>
     </div>
 
     <script>
-    const APP_ID = "68b6f73d37714d9bb27598a146ec41ef"; // Kendi App ID'ni yaz
-    
-    // URL'deki ?room=odaID kısmını okur
-    const urlParams = new URLSearchParams(window.location.search);
-    const CHANNEL = urlParams.get('room') || "test_odasi";
+        const urlParams = new URLSearchParams(window.location.search);
+        const options = {
+            appId: "fc667e2e21154602bba044359e5771a9",
+            channel: urlParams.get("channel") || "test",
+            token: null,
+            uid: Math.floor(Math.random() * 10000),
+            myLang: urlParams.get("myLang") || "tr-TR",
+            targetLang: urlParams.get("targetLang") || "English"
+        };
 
-    const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-    let localTracks = { videoTrack: null, audioTrack: null };
+        let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        let localTracks = { videoTrack: null, audioTrack: null };
 
-    async fun startCall() {
-        // ... (Geri kalan Agora kodları aynı kalacak) ...
-        // Sadece CHANNEL değişkenini yukarıdaki gibi güncelledik.
-        
-        client.on("user-published", async (user, mediaType) => {
-            await client.subscribe(user, mediaType);
-            if (mediaType === "video") {
-                user.videoTrack.play("remote-video");
+        async function startCall() {
+            client.on("user-published", async (user, mediaType) => {
+                await client.subscribe(user, mediaType);
+                if (mediaType === "video") {
+                    user.videoTrack.play("remote-player");
+                }
+                if (mediaType === "audio") {
+                    user.audioTrack.play();
+                }
+            });
+
+            [options.uid, localTracks.audioTrack, localTracks.videoTrack] = await Promise.all([
+                client.join(options.appId, options.channel, options.token, options.uid),
+                AgoraRTC.createMicrophoneAudioTrack(),
+                AgoraRTC.createCameraVideoTrack()
+            ]);
+
+            localTracks.videoTrack.play("local-player");
+            await client.publish(Object.values(localTracks));
+            startRecognition();
+        }
+
+        // SES TANIMA VE GROQ ÇEVİRİ
+        function startRecognition() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = options.myLang;
+            recognition.continuous = true;
+            recognition.interimResults = false;
+
+            recognition.onresult = async (event) => {
+                const text = event.results[event.results.length - 1][0].transcript;
+                translateWithGroq(text);
+            };
+
+            recognition.onerror = () => recognition.start();
+            recognition.onend = () => recognition.start();
+            recognition.start();
+        }
+
+        async function translateWithGroq(text) {
+            const apiKey = "YOUR_GROQ_API_KEY"; // BURAYA KEYİNİ YAZ
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "llama3-8b-8192",
+                    messages: [{ role: "user", content: `Translate this to ${options.targetLang}, only the result: ${text}` }]
+                })
+            });
+            const data = await response.json();
+            const translated = data.choices[0].message.content;
+            
+            // Altyazıyı ekrana bas ve Agora üzerinden gönder
+            document.getElementById("subtitle-box").innerText = translated;
+            // Not: Web tarafında DataStream için ek kod gerekir, şimdilik yerel gösteriyoruz.
+        }
+
+        async function leaveCall() {
+            for (trackName in localTracks) {
+                let track = localTracks[trackName];
+                if (track) { track.stop(); track.close(); }
             }
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
-        });
+            await client.leave();
+            window.location.href = "about:blank"; // WebView'ı kapatmak için sinyal
+        }
 
-        await client.join(APP_ID, CHANNEL, null, null);
-        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
-        
-        localTracks.videoTrack.play("local-video");
-        await client.publish(Object.values(localTracks));
-    }
-
-    startCall();
-</script>
+        startCall();
+    </script>
 </body>
 </html>
