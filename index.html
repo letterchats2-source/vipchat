@@ -7,31 +7,27 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; }
+        #remote-player { width: 100vw; height: 100vh; background: #111; display: flex; align-items: center; justify-content: center; }
         #local-player { 
-            width: 110px; height: 150px; 
-            position: absolute; top: 20px; right: 20px; 
-            border-radius: 12px; overflow: hidden; 
-            border: 2px solid #ffffff; z-index: 10; background: #333;
+            width: 110px; height: 150px; position: absolute; top: 20px; right: 20px; 
+            border-radius: 12px; overflow: hidden; border: 2px solid #fff; z-index: 10; background: #333;
         }
         #subtitle-box { 
             position: absolute; bottom: 120px; left: 5%; width: 90%; 
-            text-align: center; background: rgba(0,0,0,0.7); 
-            padding: 15px; font-size: 18px; border-radius: 10px;
-            min-height: 40px; z-index: 20; color: #00FF00; font-weight: bold;
+            text-align: center; background: rgba(0,0,0,0.7); padding: 15px; 
+            font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
         }
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 12px; color: #aaa; z-index: 30; }
+        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #777; z-index: 30; }
         #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; z-index: 100; }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 30px; }
+        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 24px; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar">Sistem Hazırlanıyor...</div>
-    <div id="remote-player"><span>Görüntü Bekleniyor...</span></div>
+    <div id="status-bar">Başlatılıyor...</div>
+    <div id="remote-player">Görüntü Bekleniyor...</div>
     <div id="local-player"></div>
     <div id="subtitle-box">Konuşmalar burada görünecek...</div>
-
     <div id="controls"><button class="btn-end" onclick="leaveCall()">✕</button></div>
 
     <script>
@@ -47,41 +43,58 @@
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
 
+        // 1. DİNLEYİCİYİ EN BAŞA ALIYORUZ (HİÇBİR YAYINI KAÇIRMAMAK İÇİN)
+        client.on("user-published", async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+            console.log("Abone olundu:", mediaType);
+            if (mediaType === "video") {
+                document.getElementById("remote-player").innerHTML = "";
+                user.videoTrack.play("remote-player");
+                updateStatus("Görüntü bağlandı.");
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
+        });
+
         async function startCall() {
-    try {
-        updateStatus("Medya cihazları kontrol ediliyor...");
-        
-        // Önce Mikrofonu açalım (Genelde sorun çıkarmaz)
-        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack().catch(e => {
-            updateStatus("Mikrofon hatası: " + e.message);
-            return null;
-        });
+            try {
+                updateStatus("Cihazlar hazırlanıyor...");
+                
+                // Kamera ve Mikrofonu eş zamanlı aç (Infinix'te çalışan yöntem)
+                const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+                    {}, { encoderConfig: "480p_1" }
+                );
+                localTracks.audioTrack = audioTrack;
+                localTracks.videoTrack = videoTrack;
 
-        // Kamerayı açmayı deneyelim
-        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack().catch(e => {
-            updateStatus("Kamera açılamadı, sadece sesle devam ediliyor...");
-            return null; // Kamera yoksa null dön
-        });
+                updateStatus("Kanala giriliyor...");
+                await client.join(options.appId, options.channel, null, null);
+                
+                localTracks.videoTrack.play("local-player");
+                
+                // YAYINI TOPLU YAP (Sinyal hatasını önler)
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                
+                updateStatus("Bağlantı aktif.");
+                startRecognition();
 
-        updateStatus("Kanala bağlanılıyor...");
-        await client.join(options.appId, options.channel, null, null);
-
-        // Sadece başarılı olan yayınları başlat
-        if (localTracks.videoTrack) {
-            localTracks.videoTrack.play("local-player");
-            await client.publish(localTracks.videoTrack);
+            } catch (err) {
+                updateStatus("HATA: " + err.message);
+                // Eğer sadece kamera hatasıysa sesle devam etmeyi dene
+                if (err.message.includes("Permission") || err.message.includes("NotFoundError")) {
+                   fallbackToAudioOnly();
+                }
+            }
         }
-        if (localTracks.audioTrack) {
+
+        async function fallbackToAudioOnly() {
+            updateStatus("Sadece ses modu başlatılıyor...");
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            await client.join(options.appId, options.channel, null, null);
             await client.publish(localTracks.audioTrack);
+            startRecognition();
         }
-
-        updateStatus("Bağlantı aktif.");
-        startRecognition(); // Çeviri motorunu başlat
-
-    } catch (err) {
-        updateStatus("Bağlantı başarısız: " + err.message);
-    }
-}
 
         function updateStatus(msg) {
             document.getElementById("status-bar").innerText = msg;
@@ -119,10 +132,8 @@
         }
 
         async function leaveCall() {
-            for (let trackName in localTracks) {
-                let track = localTracks[trackName];
-                if (track) { track.stop(); track.close(); }
-            }
+            if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
+            if (localTracks.audioTrack) { localTracks.audioTrack.stop(); localTracks.audioTrack.close(); }
             await client.leave();
             window.location.href = "about:blank";
         }
