@@ -6,28 +6,28 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #111; display: flex; align-items: center; justify-content: center; }
+        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
+        #remote-player { width: 100vw; height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; }
         #local-player { 
-            width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
+            width: 100px; height: 140px; position: absolute; top: 20px; right: 20px; 
             border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222;
         }
         #subtitle-box { 
             position: absolute; bottom: 120px; left: 5%; width: 90%; 
             text-align: center; background: rgba(0,0,0,0.7); padding: 12px; 
-            font-size: 17px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
+            font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
         }
-        #status-bar { position: absolute; top: 5px; left: 10px; font-size: 10px; color: #666; z-index: 30; }
-        #controls { position: absolute; bottom: 25px; width: 100%; display: flex; justify-content: center; z-index: 100; }
-        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 28px; cursor: pointer; }
+        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 12px; color: #777; z-index: 30; }
+        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; z-index: 100; }
+        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 30px; }
     </style>
 </head>
 <body>
 
-    <div id="status-bar">Sistem Hazırlanıyor...</div>
-    <div id="remote-player">Bağlantı Bekleniyor...</div>
+    <div id="status-bar">Bağlanıyor...</div>
+    <div id="remote-player">Kamera bekleniyor...</div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Çeviri burada görünecek...</div>
+    <div id="subtitle-box">...</div>
 
     <div id="controls"><button class="btn-end" onclick="leaveCall()">✕</button></div>
 
@@ -35,7 +35,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel") || "test",
+            channel: urlParams.get("channel")?.trim() || "test", // Boşlukları temizle
             myLang: urlParams.get("myLang") || "tr-TR",
             targetLang: urlParams.get("targetLang") || "English",
             groqKey: urlParams.get("gKey") || ""
@@ -44,12 +44,13 @@
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
 
-        // 1. Dinleyiciyi dışarı aldık (Yayını kaçırmamak için en garantisi bu)
+        // 1. Dinleyiciyi sabitle
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
             if (mediaType === "video") {
                 document.getElementById("remote-player").innerHTML = "";
                 user.videoTrack.play("remote-player");
+                updateStatus("Canlı yayın bağlandı!");
             }
             if (mediaType === "audio") {
                 user.audioTrack.play();
@@ -58,38 +59,33 @@
 
         async function startCall() {
             try {
-                updateStatus("İzinler isteniyor...");
+                updateStatus("Oda: " + options.channel + " | Cihazlar aranıyor...");
                 
-                // 2. TEK SEFERDE İZİN İSTE (Hız kazandırır)
+                // Cihazları aç
                 const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-                    {}, { encoderConfig: "360p_7" } // Düşük çözünürlük = Hızlı yükleme
+                    {}, { encoderConfig: "240p_1" } // Çözünürlüğü iyice düşürdük ki tablet zorlanmasın
                 );
                 localTracks.audioTrack = audioTrack;
                 localTracks.videoTrack = videoTrack;
 
-                updateStatus("Kanala bağlanılıyor...");
+                // Kanala Katıl
                 await client.join(options.appId, options.channel, null, null);
                 
+                // Görüntüleri Başlat
                 localTracks.videoTrack.play("local-player");
-                
-                // 3. TOPLU YAYIN
                 await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
 
-                updateStatus("Görüşme başladı.");
-                startRecognition();
+                updateStatus("BAĞLANTI TAMAM. Oda: " + options.channel);
+                
+                // 2. SES TANIMAYI 3 SANİYE SONRA BAŞLAT (Çakışmayı önler)
+                setTimeout(() => {
+                    startRecognition();
+                }, 3000);
 
             } catch (err) {
                 updateStatus("HATA: " + err.message);
-                // Tablet donarsa sadece sesle girmeyi dene
-                if(err.message.includes("Permission")) fallbackAudioOnly();
+                console.error(err);
             }
-        }
-
-        async function fallbackAudioOnly() {
-            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-            await client.join(options.appId, options.channel, null, null);
-            await client.publish(localTracks.audioTrack);
-            startRecognition();
         }
 
         function updateStatus(msg) {
@@ -97,18 +93,18 @@
         }
 
         function startRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) return;
-            const recognition = new SpeechRecognition();
-            recognition.lang = options.myLang;
-            recognition.continuous = true;
-            recognition.onresult = async (event) => {
-                const text = event.results[event.results.length - 1][0].transcript;
-                if(text.trim() !== "") translateWithGroq(text);
+            const sr = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!sr) return;
+            const rec = new sr();
+            rec.lang = options.myLang;
+            rec.continuous = true;
+            rec.onresult = async (e) => {
+                const text = e.results[e.results.length - 1][0].transcript;
+                if(text.trim()) translateWithGroq(text);
             };
-            recognition.onerror = () => recognition.start();
-            recognition.onend = () => recognition.start();
-            recognition.start();
+            rec.onerror = (err) => { if(err.error !== 'no-speech') rec.stop(); };
+            rec.onend = () => rec.start();
+            rec.start();
         }
 
         async function translateWithGroq(text) {
@@ -119,7 +115,7 @@
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate this to ${options.targetLang}, result only: ${text}` }]
+                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, only result: ${text}` }]
                     })
                 });
                 const data = await response.json();
@@ -131,13 +127,8 @@
             if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
             if (localTracks.audioTrack) { localTracks.audioTrack.stop(); localTracks.audioTrack.close(); }
             await client.leave();
-            
-            // 4. ANDROID'E KAPAT KOMUTU GÖNDER
-            if (window.AndroidBridge) {
-                window.AndroidBridge.closeCall();
-            } else {
-                window.location.href = "about:blank";
-            }
+            if (window.AndroidBridge) window.AndroidBridge.closeCall();
+            else window.location.href = "about:blank";
         }
 
         window.onload = startCall;
