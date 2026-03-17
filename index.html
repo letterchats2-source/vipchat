@@ -7,30 +7,27 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #000; display: flex; align-items: center; justify-content: center; }
+        #remote-player { width: 100vw; height: 100vh; background: #111; display: flex; align-items: center; justify-content: center; }
         #local-player { 
-            width: 110px; height: 150px; 
-            position: absolute; top: 20px; right: 20px; 
-            border-radius: 12px; overflow: hidden; 
-            border: 2px solid #ffffff; z-index: 10; background: #333;
+            width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
+            border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222;
         }
         #subtitle-box { 
             position: absolute; bottom: 120px; left: 5%; width: 90%; 
-            text-align: center; background: rgba(0,0,0,0.7); 
-            padding: 15px; font-size: 18px; border-radius: 10px;
-            min-height: 40px; z-index: 20; color: #00FF00; font-weight: bold;
+            text-align: center; background: rgba(0,0,0,0.7); padding: 12px; 
+            font-size: 17px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20;
         }
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 12px; color: #aaa; z-index: 30; }
-        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; z-index: 100; }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 30px; }
+        #status-bar { position: absolute; top: 5px; left: 10px; font-size: 10px; color: #666; z-index: 30; }
+        #controls { position: absolute; bottom: 25px; width: 100%; display: flex; justify-content: center; z-index: 100; }
+        .btn-end { width: 65px; height: 65px; background: #FF3B30; border-radius: 50%; border: none; color: white; font-size: 28px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="status-bar">Sistem Hazırlanıyor...</div>
-    <div id="remote-player"><span>Görüntü Bekleniyor...</span></div>
+    <div id="remote-player">Bağlantı Bekleniyor...</div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Konuşmalar burada görünecek...</div>
+    <div id="subtitle-box">Çeviri burada görünecek...</div>
 
     <div id="controls"><button class="btn-end" onclick="leaveCall()">✕</button></div>
 
@@ -47,45 +44,52 @@
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null, audioTrack: null };
 
+        // 1. Dinleyiciyi dışarı aldık (Yayını kaçırmamak için en garantisi bu)
+        client.on("user-published", async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+            if (mediaType === "video") {
+                document.getElementById("remote-player").innerHTML = "";
+                user.videoTrack.play("remote-player");
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
+        });
+
         async function startCall() {
             try {
-                updateStatus("Kamera ve Mikrofon başlatılıyor...");
+                updateStatus("İzinler isteniyor...");
                 
-                // 1. ÖNCE MEDYAYI OLUŞTUR (İzinleri Al)
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
-                
-                updateStatus("Kanala bağlanılıyor...");
+                // 2. TEK SEFERDE İZİN İSTE (Hız kazandırır)
+                const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+                    {}, { encoderConfig: "360p_7" } // Düşük çözünürlük = Hızlı yükleme
+                );
+                localTracks.audioTrack = audioTrack;
+                localTracks.videoTrack = videoTrack;
 
-                // 2. KANALA KATIL (Buradaki token kısmını netleştirdik)
-                // options.appId, options.channel, token (null), uid (null)
+                updateStatus("Kanala bağlanılıyor...");
                 await client.join(options.appId, options.channel, null, null);
                 
-                // 3. YAYINI BAŞLAT
                 localTracks.videoTrack.play("local-player");
-                await client.publish(Object.values(localTracks));
+                
+                // 3. TOPLU YAYIN
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
 
-                updateStatus("Bağlantı başarılı! Kanal: " + options.channel);
-
-                // Karşı tarafı dinle
-                client.on("user-published", async (user, mediaType) => {
-                    await client.subscribe(user, mediaType);
-                    if (mediaType === "video") {
-                        document.getElementById("remote-player").innerHTML = "";
-                        user.videoTrack.play("remote-player");
-                    }
-                    if (mediaType === "audio") {
-                        user.audioTrack.play();
-                    }
-                });
-
+                updateStatus("Görüşme başladı.");
                 startRecognition();
 
             } catch (err) {
                 updateStatus("HATA: " + err.message);
-                console.error(err);
-                // alert("Hata detay: " + err.message);
+                // Tablet donarsa sadece sesle girmeyi dene
+                if(err.message.includes("Permission")) fallbackAudioOnly();
             }
+        }
+
+        async function fallbackAudioOnly() {
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            await client.join(options.appId, options.channel, null, null);
+            await client.publish(localTracks.audioTrack);
+            startRecognition();
         }
 
         function updateStatus(msg) {
@@ -102,7 +106,7 @@
                 const text = event.results[event.results.length - 1][0].transcript;
                 if(text.trim() !== "") translateWithGroq(text);
             };
-            recognition.onerror = () => recognition.stop();
+            recognition.onerror = () => recognition.start();
             recognition.onend = () => recognition.start();
             recognition.start();
         }
@@ -115,7 +119,7 @@
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate this to ${options.targetLang}, only the result: ${text}` }]
+                        messages: [{ role: "user", content: `Translate this to ${options.targetLang}, result only: ${text}` }]
                     })
                 });
                 const data = await response.json();
@@ -124,12 +128,16 @@
         }
 
         async function leaveCall() {
-            for (let trackName in localTracks) {
-                let track = localTracks[trackName];
-                if (track) { track.stop(); track.close(); }
-            }
+            if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
+            if (localTracks.audioTrack) { localTracks.audioTrack.stop(); localTracks.audioTrack.close(); }
             await client.leave();
-            window.location.href = "about:blank";
+            
+            // 4. ANDROID'E KAPAT KOMUTU GÖNDER
+            if (window.AndroidBridge) {
+                window.AndroidBridge.closeCall();
+            } else {
+                window.location.href = "about:blank";
+            }
         }
 
         window.onload = startCall;
