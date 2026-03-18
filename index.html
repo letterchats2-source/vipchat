@@ -9,7 +9,7 @@
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         #remote-player { position: absolute; width: 100vw; height: 100vh; background: #111; z-index: 1; }
         #local-player { 
-            width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
+            width: 100px; height: 140px; position: absolute; top: 20px; right: 20px; 
             border-radius: 12px; border: 2px solid #fff; z-index: 100; background: #222;
         }
         #subtitle-box { 
@@ -26,20 +26,14 @@
             -webkit-tap-highlight-color: transparent; outline: none;
         }
         .btn-translate:active { transform: scale(0.9); background: #e68a00; }
-
         .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; -webkit-tap-highlight-color: transparent; }
 
-        /* Giriş Ekranı Overlay */
         #overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #000; display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 9999;
         }
-        .join-btn { 
-            padding: 20px 50px; font-size: 22px; background: #28a745; 
-            color: white; border: 4px solid #fff; border-radius: 50px; 
-            cursor: pointer; font-weight: bold;
-        }
+        .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border: 4px solid #fff; border-radius: 50px; cursor: pointer; font-weight: bold; }
         #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #555; z-index: 1001; }
     </style>
 </head>
@@ -61,7 +55,6 @@
     </div>
 
     <script>
-        console.log("Script yüklendi.");
         const urlParams = new URLSearchParams(window.location.search);
         const mode = urlParams.get("mode") || "global";
         const options = {
@@ -81,30 +74,41 @@
             document.getElementById("subtitle-box").style.display = "none";
         }
 
+        // Karşı taraf yayınını dinle
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video") user.videoTrack.play("remote-player");
-            if (mediaType === "audio") user.audioTrack.play();
+            if (mediaType === "video") {
+                document.getElementById("remote-player").innerHTML = "";
+                user.videoTrack.play("remote-player");
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
         });
 
+        // GÖRÜŞMEYİ BAŞLAT
         async function startCall() {
-            console.log("startCall tetiklendi");
             document.getElementById("overlay").style.display = "none";
-            updateStatus("Bağlanıyor...");
+            updateStatus("Cihazlar hazırlanıyor...");
 
             try {
+                // Mikrofon ve Kamera
                 const tracks = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
                 localTracks = tracks;
+                
                 await client.join(options.appId, options.channel, null, null);
                 
-                if (mode !== "audio") localTracks[1].play("local-player");
-                await client.publish(localTracks);
+                if (mode !== "audio") {
+                    localTracks[1].play("local-player");
+                }
                 
-                updateStatus("Canlı Yayın Aktif 🟢");
+                await client.publish(localTracks);
+                updateStatus("Yayın Aktif 🟢");
+                
                 if (mode === "global") startRecognition();
             } catch (err) {
-                alert("Hata: " + err.message);
                 updateStatus("Hata: " + err.message);
+                alert("İzinleri kontrol edin: " + err.message);
             }
         }
 
@@ -112,10 +116,11 @@
             document.getElementById("status-bar").innerText = msg;
         }
 
+        // SES TANIMA
         function startRecognition() {
-            const sr = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!sr) return;
-            const rec = new sr();
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) return;
+            const rec = new SpeechRecognition();
             rec.lang = options.myLang;
             rec.continuous = true;
             rec.interimResults = true;
@@ -127,6 +132,7 @@
             rec.start();
         }
 
+        // ÇEVİRİ BUTONU
         async function manualTranslate() {
             const btn = document.getElementById("trans-btn");
             const box = document.getElementById("subtitle-box");
@@ -137,32 +143,48 @@
             }
 
             btn.innerText = "⏳";
-            box.innerText = "VIP AI Çeviriyor...";
+            box.innerText = "AI Çeviriyor...";
 
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
-                    headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
+                    headers: { 
+                        "Authorization": "Bearer " + options.groqKey, 
+                        "Content-Type": "application/json" 
+                    },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, result only: ${lastSpokenText}` }]
+                        messages: [{ 
+                            role: "user", 
+                            content: "Translate the following to " + options.targetLang + ". Provide ONLY the translation: " + lastSpokenText 
+                        }]
                     })
                 });
-                const data = await res.json(); // HATA BURADAYDI, DÜZELTİLDİ
-                box.innerText = data.choices[0].message.content;
+                const data = await res.json();
+                if (data.choices && data.choices[0]) {
+                    box.innerText = data.choices[0].message.content;
+                } else {
+                    box.innerText = "Çeviri alınamadı.";
+                }
             } catch (err) {
-                box.innerText = "Hata oluştu.";
+                box.innerText = "Hata: " + err.message;
             } finally {
                 btn.innerText = "ÇEVİR";
             }
         }
 
+        // KAPATMA
         async function leaveCall() {
             localTracks.forEach(t => { t.stop(); t.close(); });
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
             else window.location.href = "about:blank";
         }
+
+        // Fonksiyonları global yapalım
+        window.startCall = startCall;
+        window.manualTranslate = manualTranslate;
+        window.leaveCall = leaveCall;
     </script>
 </body>
 </html>
