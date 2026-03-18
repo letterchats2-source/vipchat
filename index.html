@@ -94,24 +94,24 @@
     const btn = document.getElementById("trans-btn");
     btn.innerText = "⏳";
     
-    // ARTIK WEB'DEN DEĞİL, ANDROID NATIVE ÜZERİNDEN İSTİYORUZ (CORS Engeli Yok!)
-    if (window.AndroidBridge) {
+    // ANDROID NATIVE'DEKI requestTranslation FONKSIYONUNU ÇAĞIR
+    if (window.AndroidBridge && window.AndroidBridge.requestTranslation) {
         window.AndroidBridge.requestTranslation(lastSpokenText);
     }
 }
 
-// Android'den gelen çeviriyi ekrana basan yeni fonksiyon (Bunu ekle):
+// Android çeviriyi yapınca bu fonksiyonu tetikleyecek
 window.displayTranslation = function(translatedText) {
     const box = document.getElementById("subtitle-box");
     const btn = document.getElementById("trans-btn");
     
     box.innerText = translatedText;
-    box.style.color = "#00FF00"; // Yeşil VIP renk
+    box.style.color = "#00FF00"; // VIP Yeşil
     btn.innerText = "ÇEVİR";
 
     // Karşı tarafa Agora üzerinden gönder
     const msg = new TextEncoder().encode(translatedText);
-    client.sendStreamMessage(msg).catch(e => console.error("Agora Mesaj Hatası:", e));
+    client.sendStreamMessage(msg).catch(e => console.error("Agora Gönderim Hatası:", e));
 };
 
         const data = await response.json();
