@@ -140,25 +140,25 @@
 
         // 6. KOTLIN'DEN GELEN ÇEVİRİ SONUCUNU GÖSTER VE KARŞIYA GÖNDER
         // async ekledik çünkü await client.sendStreamMessage kullanacağız
-        window.displayTranslation = async function(translatedText) {
-            const box = document.getElementById("subtitle-box");
-            const btn = document.getElementById("trans-btn");
-            
-            // Metni temizle (Tırnak hatalarını önlemek için)
-            const cleanText = translatedText.replace(/[']/g, "").trim();
-            
-            box.innerText = cleanText;
-            box.style.color = "#00FF00"; // Başarılı çeviri YEŞİL
-            btn.innerText = "ÇEVİR";
+        window.displayTranslation = function(translatedText) {
+    const box = document.getElementById("subtitle-box");
+    const btn = document.getElementById("trans-btn");
+    
+    // Gelen metindeki tırnakları ve satır başlarını tamamen temizle
+    const cleanText = translatedText.replace(/['"\\']/g, "").replace(/\n/g, " ");
+    
+    box.innerText = cleanText;
+    box.style.color = "#00FF00"; // VIP Yeşil
+    btn.innerText = "ÇEVİR";
 
-            // Agora DataStream üzerinden karşı tarafa gönder
-            try {
-                const msg = new TextEncoder().encode(cleanText);
-                await client.sendStreamMessage(msg);
-            } catch (e) {
-                console.error("Mesaj karşıya iletilemedi:", e);
-            }
-        };
+    // Karşı tarafa Agora üzerinden gönder
+    try {
+        const msg = new TextEncoder().encode(cleanText);
+        client.sendStreamMessage(msg);
+    } catch (e) {
+        console.error("Agora Mesaj Hatası:", e);
+    }
+};
 
         async function leaveCall() {
             if (localTracks.videoTrack) { 
