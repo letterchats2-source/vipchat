@@ -7,23 +7,66 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #000; }
-        #local-player { width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: absolute; bottom: 110px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 17px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 20; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+        
+        /* Video Katmanları */
+        #remote-player { position: absolute; width: 100vw; height: 100vh; background: #000; z-index: 1; }
+        #local-player { 
+            width: 100px; height: 140px; position: absolute; top: 20px; right: 20px; 
+            border-radius: 12px; border: 2px solid #fff; z-index: 100; background: #222;
+        }
+
+        /* Altyazı Kutusu - EN ÜSTE ZORLANDI */
+        #subtitle-box { 
+            position: absolute; bottom: 130px; left: 5%; width: 90%; 
+            text-align: center; background: rgba(0,0,0,0.8); padding: 15px; 
+            font-size: 20px; border-radius: 15px; color: #00FF00; 
+            font-weight: bold; z-index: 999; min-height: 30px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* Durum Çubuğu */
+        #status-bar { 
+            position: absolute; top: 10px; left: 10px; font-size: 12px; 
+            z-index: 1000; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px;
+        }
+
+        /* Kontrol Butonları - EN ÜSTE ZORLANDI */
+        #controls { 
+            position: absolute; bottom: 40px; width: 100%; 
+            display: flex; justify-content: center; z-index: 1000; 
+        }
+        .btn-end { 
+            width: 70px; height: 70px; background: #FF3B30; 
+            border-radius: 50%; border: 4px solid #fff; color: white; 
+            font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
+        /* Giriş Ekranı */
+        #overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 2000;
+        }
         .join-btn { padding: 20px 40px; font-size: 20px; background: #28a745; color: white; border: none; border-radius: 50px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h3 id="info">Oda Hazır</h3>
-        <button class="join-btn" onclick="startCall()">GÖRÜŞMEYE KATIL</button>
+        <h2 id="room-info">Bağlantı Hazır</h2>
+        <button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button>
     </div>
 
+    <div id="status-bar">Sistem bekleniyor...</div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">...</div>
+    
+    <!-- ÇEVİRİ BURADA GÖRÜNECEK -->
+    <div id="subtitle-box">Konuşmanız çevriliyor...</div>
+
+    <div id="controls">
+        <button class="btn-end" onclick="leaveCall()">✕</button>
+    </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -38,81 +81,106 @@
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = [];
 
+        // Karşı tarafı dinle
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video") user.videoTrack.play("remote-player");
-            if (mediaType === "audio") user.audioTrack.play();
+            if (mediaType === "video") {
+                user.videoTrack.play("remote-player");
+                updateStatus("Görüntü Bağlandı ✅");
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
         });
 
         async function startCall() {
             document.getElementById("overlay").style.display = "none";
+            updateStatus("Kamera açılıyor...");
+
             try {
-                // Kamera ve mikrofonu tek tek deniyoruz (Hata yakalamak için)
                 const audio = await AgoraRTC.createMicrophoneAudioTrack();
                 const video = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                
                 localTracks = [audio, video];
+
                 await client.join(options.appId, options.channel, null, null);
                 video.play("local-player");
                 await client.publish(localTracks);
                 
+                updateStatus("Canlı Yayın Aktif 🟢");
+                
+                // ÇEVİRİ MOTORUNU BAŞLAT
                 startRecognition();
+
             } catch (err) {
-                if (err.code === "NOT_READABLE") {
-                    alert("Kamera şu an meşgul! Lütfen tableti yeniden başlatıp tekrar deneyin.");
-                } else {
-                    alert("Hata: " + err.message);
-                }
-                // Kamera hatası alsa bile sadece sesle girmeyi dene
+                updateStatus("Hata: " + err.message);
+                // Kamera hatası varsa sadece sesle dene
                 fallbackAudio();
             }
         }
 
         async function fallbackAudio() {
-            try {
-                const audio = await AgoraRTC.createMicrophoneAudioTrack();
-                await client.join(options.appId, options.channel, null, null);
-                await client.publish(audio);
-                startRecognition();
-            } catch (e) { console.error("Ses de açılamadı"); }
+            const audio = await AgoraRTC.createMicrophoneAudioTrack();
+            await client.join(options.appId, options.channel, null, null);
+            await client.publish(audio);
+            startRecognition();
         }
 
+        function updateStatus(msg) {
+            document.getElementById("status-bar").innerText = msg;
+        }
+
+        // --- SES TANIMA (STT) ---
         function startRecognition() {
-            const sr = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!sr) return;
-            const rec = new sr();
-            rec.lang = options.myLang;
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                document.getElementById("subtitle-box").innerText = "HATA: Tarayıcı çeviriyi desteklemiyor.";
+                return;
+            }
+
+            const rec = new SpeechRecognition();
+            rec.lang = options.myLang; // Örn: "tr-TR"
             rec.continuous = true;
-            rec.onresult = async (e) => {
-                const text = e.results[e.results.length - 1][0].transcript;
-                if(text.trim()) translateWithGroq(text);
+            rec.interimResults = false;
+
+            rec.onstart = () => updateStatus("Sizi dinliyorum... 🎙️");
+
+            rec.onresult = async (event) => {
+                const text = event.results[event.results.length - 1][0].transcript;
+                document.getElementById("subtitle-box").innerText = "Çevriliyor: " + text;
+                translateWithGroq(text);
             };
-            rec.onend = () => rec.start();
+
+            rec.onend = () => rec.start(); // Bağlantı koparsa geri aç
             rec.start();
         }
 
+        // --- GROQ AI ÇEVİRİ ---
         async function translateWithGroq(text) {
             if (!options.groqKey) return;
             try {
-                const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, result only: ${text}` }]
+                        messages: [{ 
+                            role: "user", 
+                            content: `Translate the following text to ${options.targetLang}. Provide ONLY the translation text, no explanations: ${text}` 
+                        }]
                     })
                 });
-                const data = await res.json();
-                document.getElementById("subtitle-box").innerText = data.choices[0].message.content;
-            } catch (err) {}
+                const data = await response.json();
+                const translated = data.choices[0].message.content;
+                
+                // EKİNDEKİ MUCİZE: Çeviriyi yeşil kutuya bas
+                document.getElementById("subtitle-box").innerText = translated;
+            } catch (err) {
+                console.error("Groq Error:", err);
+            }
         }
 
-        // --- ZOMBİ SESLERİ ÖLDÜREN KAPATMA ---
         async function leaveCall() {
-            localTracks.forEach(track => {
-                track.stop();
-                track.close();
-            });
+            localTracks.forEach(t => { t.stop(); t.close(); });
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
