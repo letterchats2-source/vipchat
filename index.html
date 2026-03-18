@@ -6,47 +6,83 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { width: 100vw; height: 100vh; background: #000; }
-        #local-player { width: 100px; height: 140px; position: absolute; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 100; }
+        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         
-        #subtitle-box { 
-            position: absolute; bottom: 140px; left: 5%; width: 90%; 
-            text-align: center; background: rgba(0,0,0,0.8); padding: 15px; 
-            font-size: 18px; border-radius: 10px; color: #00FF00; z-index: 999;
+        /* Video Alanları */
+        #remote-player { position: absolute; width: 100vw; height: 100vh; background: #000; z-index: 1; }
+        #local-player { 
+            width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
+            border-radius: 12px; border: 2px solid #fff; z-index: 100; background: #222;
         }
 
-        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 30px; z-index: 1000; }
-        
-        /* Çeviri Tetikleme Butonu */
-        .btn-translate { 
-            width: 70px; height: 70px; background: #FF9800; border-radius: 50%; 
-            border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer;
+        /* Altyazı Kutusu */
+        #subtitle-box { 
+            position: absolute; bottom: 140px; left: 5%; width: 90%; 
+            text-align: center; background: rgba(0,0,0,0.8); padding: 12px; 
+            font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 999;
+            min-height: 25px; border: 1px solid rgba(255,255,255,0.2);
         }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; }
+
+        /* Kontrol Paneli */
+        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 1000; }
         
-        #status { position: absolute; top: 10px; left: 10px; font-size: 12px; z-index: 1000; color: #aaa; }
+        /* ÇEVİR BUTONU - MAVİ KAREYİ YOK EDEN STİL */
+        .btn-translate { 
+            width: 85px; height: 85px; background: #FF9800; border-radius: 50%; 
+            border: 4px solid #fff; color: white; font-weight: bold; font-size: 15px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            -webkit-tap-highlight-color: transparent; /* MAVİ KAREYİ YOK EDER */
+            outline: none; transition: transform 0.1s, background 0.2s;
+            user-select: none;
+        }
+
+        .btn-translate:active {
+            transform: scale(0.85); /* Basıldığında küçülme efekti */
+            background: #e68a00;
+        }
+
+        .btn-end { 
+            width: 70px; height: 70px; background: #FF3B30; 
+            border-radius: 50%; border: 4px solid #fff; color: white; 
+            font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Giriş Ekranı (Overlay) */
+        #overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 2000;
+        }
+        .join-btn { padding: 20px 40px; font-size: 22px; background: #28a745; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
+        
+        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #777; z-index: 1001; }
     </style>
 </head>
 <body>
 
-    <div id="status">Hazırlanıyor...</div>
+    <div id="overlay">
+        <h2 id="room-info">Bağlantı Hazır</h2>
+        <button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button>
+    </div>
+
+    <div id="status-bar">Bekleniyor...</div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
     <div id="subtitle-box">Konuşun ve 'ÇEVİR'e basın...</div>
 
     <div id="controls">
-        <!-- Sadece GLOBAL modda görünen çeviri butonu -->
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
         <button class="btn-end" onclick="leaveCall()">✕</button>
     </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
-        const mode = urlParams.get("mode") || "global"; // "audio", "video", "global"
+        const mode = urlParams.get("mode") || "global";
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel"),
+            channel: urlParams.get("channel") || "test",
             myLang: urlParams.get("myLang") || "tr-TR",
             targetLang: urlParams.get("targetLang") || "English",
             groqKey: urlParams.get("gKey") || ""
@@ -54,87 +90,114 @@
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = [];
-        let lastSpokenText = ""; // En son yakalanan konuşma
+        let lastSpokenText = ""; 
 
-        // Mod ayarları
-        if (mode === "audio") document.getElementById("local-player").style.display = "none";
+        // Mod Kontrolü
         if (mode !== "global") {
-            document.getElementById("subtitle-box").style.display = "none";
             document.getElementById("trans-btn").style.display = "none";
+            document.getElementById("subtitle-box").style.display = "none";
         }
 
+        // Karşı tarafı yakala
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video" && mode !== "audio") user.videoTrack.play("remote-player");
+            if (mediaType === "video") user.videoTrack.play("remote-player");
             if (mediaType === "audio") user.audioTrack.play();
         });
 
         async function startCall() {
+            document.getElementById("overlay").style.display = "none";
+            updateStatus("Oda: " + options.channel + " | Başlatılıyor...");
+
             try {
                 const tracks = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
                 localTracks = tracks;
-                
                 await client.join(options.appId, options.channel, null, null);
                 
                 if (mode !== "audio") localTracks[1].play("local-player");
+                await client.publish(localTracks);
                 
-                // Moduna göre yayını başlat
-                if (mode === "audio") await client.publish(localTracks[0]);
-                else await client.publish(localTracks);
+                updateStatus("Yayın Aktif 🟢");
+                if (mode === "global") startRecognition();
 
-                if (mode === "global") startSpeechLogic();
-                
-                document.getElementById("status").innerText = "MOD: " + mode.toUpperCase();
-            } catch (e) { alert("Hata: " + e.message); }
+            } catch (err) {
+                updateStatus("Hata: " + err.message);
+                alert("İzin hatası: " + err.message);
+            }
         }
 
-        // --- SESİ SÜREKLİ DİNLE AMA ÇEVİRME ---
-        function startSpeechLogic() {
+        function updateStatus(msg) {
+            document.getElementById("status-bar").innerText = msg;
+        }
+
+        // --- SES TANIMA ---
+        function startRecognition() {
             const sr = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!sr) return;
             const rec = new sr();
             rec.lang = options.myLang;
             rec.continuous = true;
-            rec.interimResults = true;
+            rec.interimResults = true; // Anlık değişimleri yakala
 
             rec.onresult = (e) => {
                 lastSpokenText = e.results[e.results.length - 1][0].transcript;
                 document.getElementById("subtitle-box").innerText = "Duyulan: " + lastSpokenText;
+                document.getElementById("subtitle-box").style.color = "#fff";
             };
+
+            rec.onerror = () => rec.stop();
             rec.onend = () => rec.start();
             rec.start();
         }
 
-        // --- BUTONA BASILDIĞINDA ÇEVİRİYE GÖNDER ---
+        // --- MANUEL ÇEVİRİ BUTONU ---
         async function manualTranslate() {
-            if (!lastSpokenText) return;
-            document.getElementById("subtitle-box").innerText = "VIP Çeviri yapılıyor...";
-            
+            const btn = document.getElementById("trans-btn");
+            const box = document.getElementById("subtitle-box");
+
+            if (!lastSpokenText) {
+                box.innerText = "⚠️ Önce konuşun...";
+                return;
+            }
+
+            // Görsel geri bildirim
+            if (navigator.vibrate) navigator.vibrate(50); // Titreşim (Destekliyorsa)
+            btn.innerText = "⏳";
+            btn.style.background = "#555";
+            box.innerText = "VIP AI Çeviriyor...";
+
             try {
                 const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ role: "user", content: `Translate to ${options.targetLang}: ${lastSpokenText}` }]
+                        messages: [{ 
+                            role: "user", 
+                            content: `Translate the following text to ${options.targetLang}. Provide ONLY the translation, no chat: ${lastSpokenText}` 
+                        }]
                     })
                 });
-                const data = await res.json();
+                const data = await response = await res.json();
                 const result = data.choices[0].message.content;
                 
-                // Ekranlara yazdır
-                document.getElementById("subtitle-box").innerText = result;
-                
-                // NOT: Burada Firebase'e kaydedip karşıya gönderme mantığını tetikleyebilirsin.
-            } catch (err) { document.getElementById("subtitle-box").innerText = "Hata oluştu."; }
+                box.innerText = result;
+                box.style.color = "#00FF00"; // Çeviri yeşil görünsün
+
+            } catch (err) {
+                box.innerText = "HATA: API Limiti veya İnternet.";
+            } finally {
+                btn.innerText = "ÇEVİR";
+                btn.style.background = "#FF9800";
+            }
         }
 
         async function leaveCall() {
             localTracks.forEach(t => { t.stop(); t.close(); });
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
+            else window.location.href = "about:blank";
         }
-
-        window.onload = startCall;
     </script>
 </body>
 </html>
