@@ -9,7 +9,7 @@
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
         #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.7); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
         .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
         .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
@@ -18,14 +18,10 @@
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <button id="main-join-btn" class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button>
-    </div>
-    
+    <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Sistem hazır...</div>
-    
+    <div id="subtitle-box">Duyulan metin burada görünecek...</div>
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
         <button class="btn-end" onclick="leaveCall()">✕</button>
@@ -35,15 +31,13 @@
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel"),
-            targetLang: urlParams.get("targetLang") || "English"
+            channel: urlParams.get("channel")
         };
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = { videoTrack: null };
         let lastSpokenText = "";
 
-        // 1. Karşıdan gelen çeviri
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             const box = document.getElementById("subtitle-box");
@@ -57,7 +51,6 @@
             if (mediaType === "audio") user.audioTrack.play();
         });
 
-        // 2. Görüşmeyi Başlat
         async function startCall() {
             document.getElementById("overlay").style.display = "none";
             try {
@@ -65,41 +58,30 @@
                 localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                 localTracks.videoTrack.play("local-player");
                 await client.publish(localTracks.videoTrack);
-            } catch (err) {
-                alert("Hata: " + err.message);
-            }
+            } catch (err) { alert(err.message); }
         }
 
-        // 3. Android Köprüleri
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
-            const box = document.getElementById("subtitle-box");
-            box.innerText = text;
-            box.style.color = "#fff";
+            document.getElementById("subtitle-box").innerText = text;
+            document.getElementById("subtitle-box").style.color = "#fff";
         };
 
         window.receivePartialFromAndroid = function(text) {
             document.getElementById("subtitle-box").innerText = "..." + text;
         };
 
-        // 4. Çeviri Butonu
         function manualTranslate() {
             if (!lastSpokenText) return;
             document.getElementById("trans-btn").innerText = "⏳";
-            if (window.AndroidBridge) {
-                window.AndroidBridge.requestTranslation(lastSpokenText);
-            }
+            if (window.AndroidBridge) window.AndroidBridge.requestTranslation(lastSpokenText);
         }
 
-        // 5. Native'den gelen sonuç
         window.displayTranslation = function(translatedText) {
             const box = document.getElementById("subtitle-box");
-            const btn = document.getElementById("trans-btn");
-            
             box.innerText = translatedText;
             box.style.color = "#00FF00";
-            btn.innerText = "ÇEVİR";
-
+            document.getElementById("trans-btn").innerText = "ÇEVİR";
             const msg = new TextEncoder().encode(translatedText);
             client.sendStreamMessage(msg).catch(e => console.error(e));
         };
