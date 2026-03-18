@@ -7,70 +7,53 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        
-        /* Video Alanları */
-        #remote-player { position: absolute; width: 100vw; height: 100vh; background: #000; z-index: 1; }
+        #remote-player { position: absolute; width: 100vw; height: 100vh; background: #111; z-index: 1; }
         #local-player { 
             width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; 
             border-radius: 12px; border: 2px solid #fff; z-index: 100; background: #222;
         }
-
-        /* Altyazı Kutusu */
         #subtitle-box { 
-            position: absolute; bottom: 140px; left: 5%; width: 90%; 
+            position: absolute; bottom: 130px; left: 5%; width: 90%; 
             text-align: center; background: rgba(0,0,0,0.8); padding: 12px; 
             font-size: 18px; border-radius: 10px; color: #00FF00; font-weight: bold; z-index: 999;
-            min-height: 25px; border: 1px solid rgba(255,255,255,0.2);
+            min-height: 25px;
         }
-
-        /* Kontrol Paneli */
         #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 1000; }
         
-        /* ÇEVİR BUTONU - MAVİ KAREYİ YOK EDEN STİL */
         .btn-translate { 
-            width: 85px; height: 85px; background: #FF9800; border-radius: 50%; 
-            border: 4px solid #fff; color: white; font-weight: bold; font-size: 15px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-            -webkit-tap-highlight-color: transparent; /* MAVİ KAREYİ YOK EDER */
-            outline: none; transition: transform 0.1s, background 0.2s;
-            user-select: none;
+            width: 80px; height: 80px; background: #FF9800; border-radius: 50%; 
+            border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer;
+            -webkit-tap-highlight-color: transparent; outline: none;
         }
+        .btn-translate:active { transform: scale(0.9); background: #e68a00; }
 
-        .btn-translate:active {
-            transform: scale(0.85); /* Basıldığında küçülme efekti */
-            background: #e68a00;
-        }
+        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; -webkit-tap-highlight-color: transparent; }
 
-        .btn-end { 
-            width: 70px; height: 70px; background: #FF3B30; 
-            border-radius: 50%; border: 4px solid #fff; color: white; 
-            font-size: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        /* Giriş Ekranı (Overlay) */
+        /* Giriş Ekranı Overlay */
         #overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: #000; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 2000;
+            align-items: center; justify-content: center; z-index: 9999;
         }
-        .join-btn { padding: 20px 40px; font-size: 22px; background: #28a745; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
-        
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #777; z-index: 1001; }
+        .join-btn { 
+            padding: 20px 50px; font-size: 22px; background: #28a745; 
+            color: white; border: 4px solid #fff; border-radius: 50px; 
+            cursor: pointer; font-weight: bold;
+        }
+        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 11px; color: #555; z-index: 1001; }
     </style>
 </head>
 <body>
 
     <div id="overlay">
-        <h2 id="room-info">Bağlantı Hazır</h2>
+        <h2 id="room-info">TranslateTalk VIP</h2>
         <button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button>
     </div>
 
     <div id="status-bar">Bekleniyor...</div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Konuşun ve 'ÇEVİR'e basın...</div>
+    <div id="subtitle-box">Konuşmanız burada görünecek...</div>
 
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
@@ -78,6 +61,7 @@
     </div>
 
     <script>
+        console.log("Script yüklendi.");
         const urlParams = new URLSearchParams(window.location.search);
         const mode = urlParams.get("mode") || "global";
         const options = {
@@ -90,15 +74,13 @@
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         let localTracks = [];
-        let lastSpokenText = ""; 
+        let lastSpokenText = "";
 
-        // Mod Kontrolü
         if (mode !== "global") {
             document.getElementById("trans-btn").style.display = "none";
             document.getElementById("subtitle-box").style.display = "none";
         }
 
-        // Karşı tarafı yakala
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
             if (mediaType === "video") user.videoTrack.play("remote-player");
@@ -106,8 +88,9 @@
         });
 
         async function startCall() {
+            console.log("startCall tetiklendi");
             document.getElementById("overlay").style.display = "none";
-            updateStatus("Oda: " + options.channel + " | Başlatılıyor...");
+            updateStatus("Bağlanıyor...");
 
             try {
                 const tracks = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
@@ -117,12 +100,11 @@
                 if (mode !== "audio") localTracks[1].play("local-player");
                 await client.publish(localTracks);
                 
-                updateStatus("Yayın Aktif 🟢");
+                updateStatus("Canlı Yayın Aktif 🟢");
                 if (mode === "global") startRecognition();
-
             } catch (err) {
+                alert("Hata: " + err.message);
                 updateStatus("Hata: " + err.message);
-                alert("İzin hatası: " + err.message);
             }
         }
 
@@ -130,27 +112,21 @@
             document.getElementById("status-bar").innerText = msg;
         }
 
-        // --- SES TANIMA ---
         function startRecognition() {
             const sr = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!sr) return;
             const rec = new sr();
             rec.lang = options.myLang;
             rec.continuous = true;
-            rec.interimResults = true; // Anlık değişimleri yakala
-
+            rec.interimResults = true;
             rec.onresult = (e) => {
                 lastSpokenText = e.results[e.results.length - 1][0].transcript;
                 document.getElementById("subtitle-box").innerText = "Duyulan: " + lastSpokenText;
-                document.getElementById("subtitle-box").style.color = "#fff";
             };
-
-            rec.onerror = () => rec.stop();
             rec.onend = () => rec.start();
             rec.start();
         }
 
-        // --- MANUEL ÇEVİRİ BUTONU ---
         async function manualTranslate() {
             const btn = document.getElementById("trans-btn");
             const box = document.getElementById("subtitle-box");
@@ -160,10 +136,7 @@
                 return;
             }
 
-            // Görsel geri bildirim
-            if (navigator.vibrate) navigator.vibrate(50); // Titreşim (Destekliyorsa)
             btn.innerText = "⏳";
-            btn.style.background = "#555";
             box.innerText = "VIP AI Çeviriyor...";
 
             try {
@@ -172,23 +145,15 @@
                     headers: { "Authorization": `Bearer ${options.groqKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "llama3-8b-8192",
-                        messages: [{ 
-                            role: "user", 
-                            content: `Translate the following text to ${options.targetLang}. Provide ONLY the translation, no chat: ${lastSpokenText}` 
-                        }]
+                        messages: [{ role: "user", content: `Translate to ${options.targetLang}, result only: ${lastSpokenText}` }]
                     })
                 });
-                const data = await response = await res.json();
-                const result = data.choices[0].message.content;
-                
-                box.innerText = result;
-                box.style.color = "#00FF00"; // Çeviri yeşil görünsün
-
+                const data = await res.json(); // HATA BURADAYDI, DÜZELTİLDİ
+                box.innerText = data.choices[0].message.content;
             } catch (err) {
-                box.innerText = "HATA: API Limiti veya İnternet.";
+                box.innerText = "Hata oluştu.";
             } finally {
                 btn.innerText = "ÇEVİR";
-                btn.style.background = "#FF9800";
             }
         }
 
