@@ -6,22 +6,22 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { position: absolute; width: 100vw; height: 100vh; background: #111; z-index: 1; }
-        #local-player { width: 100px; height: 140px; position: absolute; top: 15px; right: 15px; border-radius: 12px; border: 2px solid #fff; z-index: 100; }
-        #subtitle-box { position: absolute; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 19px; border-radius: 12px; color: #fff; z-index: 999; min-height: 30px; }
-        #controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 1000; }
-        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
+        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; }
+        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
+        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
+        #subtitle-box { position: fixed; bottom: 120px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #00FF00; z-index: 100; min-height: 25px; border: 1px solid #333; }
+        #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
+        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; -webkit-tap-highlight-color: transparent; }
         .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
-        .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border-radius: 50px; cursor: pointer; font-weight: bold; border: 4px solid #fff; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border-radius: 50px; cursor: pointer; border: 4px solid #fff; }
     </style>
 </head>
 <body>
     <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Konuşmanız çevrilecek...</div>
+    <div id="subtitle-box">Konuşun ve ÇEVİR'e basın...</div>
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
         <button class="btn-end" onclick="leaveCall()">✕</button>
@@ -32,13 +32,13 @@
         const mode = urlParams.get("mode") || "global";
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel") || "test",
+            channel: urlParams.get("channel"),
             targetLang: urlParams.get("targetLang") || "English",
             groqKey: urlParams.get("gKey") || ""
         };
 
         let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        let localTracks = [];
+        let localTracks = { videoTrack: null };
         let lastSpokenText = "";
         let dataStreamId = null;
 
@@ -47,7 +47,7 @@
             document.getElementById("subtitle-box").style.display = "none";
         }
 
-        // KARŞI TARAFTAN GELEN ÇEVİRİYİ DİNLE
+        // KARŞI TARAFTAN GELEN ÇEVİRİYİ GÖSTER
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             document.getElementById("subtitle-box").innerText = text;
@@ -63,17 +63,19 @@
         async function startCall() {
             document.getElementById("overlay").style.display = "none";
             try {
-                localTracks = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
+                // SADECE KAMERA (Mikrofon Android'de)
+                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({encoderConfig: "240p_1"});
                 await client.join(options.appId, options.channel, null, null);
                 
-                // VERİ KANALINI AÇ
+                // VERİ KANALINI AÇ (Altyazı gönderimi için)
                 dataStreamId = client.createCustomDataStream({ reliable: true, ordered: true });
 
-                if (mode !== "audio") localTracks[1].play("local-player");
-                await client.publish(localTracks);
+                localTracks.videoTrack.play("local-player");
+                await client.publish(localTracks.videoTrack);
             } catch (err) { console.error(err); }
         }
 
+        // ANDROID'DEN METİN ALMA
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
             document.getElementById("subtitle-box").innerText = "Duyulan: " + text;
@@ -100,18 +102,20 @@
                 });
                 const data = await response.json();
                 const translated = data.choices[0].message.content;
-                box.innerText = translated;
-                box.style.color = "#00FF00";
+                
+                // Kendi ekranımda beyaz, onda YEŞİL görünsün
+                box.innerText = "Sen: " + translated;
+                box.style.color = "#fff";
 
-                // KARŞI TARAFA GÖNDER
+                // KARŞI TARAFA FIRLAT
                 if (dataStreamId) client.sendStreamMessage(dataStreamId, new TextEncoder().encode(translated));
 
-            } catch (err) { box.innerText = "Hata!"; }
+            } catch (e) { box.innerText = "Hata!"; }
             finally { btn.innerText = "ÇEVİR"; }
         }
 
         async function leaveCall() {
-            localTracks.forEach(t => { t.stop(); t.close(); });
+            if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
