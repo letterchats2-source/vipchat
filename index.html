@@ -97,31 +97,27 @@
         async function manualTranslate() {
     if (!lastSpokenText) return;
     const btn = document.getElementById("trans-btn");
-    const box = document.getElementById("subtitle-box");
-    
-    // Google Gemini API Ayarları
-    const apiKey = options.groqKey; // Android'den gelen anahtar
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
     btn.innerText = "⏳";
-    btn.disabled = true;
+    
+    // ARTIK WEB'DEN DEĞİL, ANDROID NATIVE ÜZERİNDEN İSTİYORUZ (CORS Engeli Yok!)
+    if (window.AndroidBridge) {
+        window.AndroidBridge.requestTranslation(lastSpokenText);
+    }
+}
 
-    try {
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: `Translate the following text to ${options.targetLang}. Provide ONLY the translated text, absolutely no preamble or explanations: "${lastSpokenText}"`
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.1, // Daha net ve tutarlı çeviri için düşük tutuyoruz
-                    maxOutputTokens: 200,
-                }
-            })
-        });
+// Android'den gelen çeviriyi ekrana basan yeni fonksiyon (Bunu ekle):
+window.displayTranslation = function(translatedText) {
+    const box = document.getElementById("subtitle-box");
+    const btn = document.getElementById("trans-btn");
+    
+    box.innerText = translatedText;
+    box.style.color = "#00FF00"; // Yeşil VIP renk
+    btn.innerText = "ÇEVİR";
+
+    // Karşı tarafa Agora üzerinden gönder
+    const msg = new TextEncoder().encode(translatedText);
+    client.sendStreamMessage(msg).catch(e => console.error("Agora Mesaj Hatası:", e));
+};
 
         const data = await response.json();
         
