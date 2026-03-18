@@ -6,22 +6,22 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
-        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
+        body { margin: 0; padding: 0; background: #111; color: white; font-family: sans-serif; }
+        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #000; z-index: 1; top:0; left:0; }
+        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 10px; border: 2px solid #fff; z-index: 10; background: #222; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
-        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
+        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; }
+        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; }
-        .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border-radius: 50px; cursor: pointer; border: 4px solid #fff; font-weight: bold; }
+        .join-btn { padding: 20px 40px; font-size: 20px; background: #28a745; color: white; border-radius: 10px; cursor: pointer; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Duyulan metin burada görünecek...</div>
+    <div id="subtitle-box">Duyulan metin burada...</div>
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
         <button class="btn-end" onclick="leaveCall()">✕</button>
@@ -38,6 +38,7 @@
         let localTracks = { videoTrack: null };
         let lastSpokenText = "";
 
+        // 1. Karşıdan gelen çeviri mesajı
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             const box = document.getElementById("subtitle-box");
@@ -58,7 +59,7 @@
                 localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                 localTracks.videoTrack.play("local-player");
                 await client.publish(localTracks.videoTrack);
-            } catch (err) { alert(err.message); }
+            } catch (e) { alert("Giriş hatası: " + e.message); }
         }
 
         window.receiveFromAndroid = function(text) {
@@ -77,13 +78,16 @@
             if (window.AndroidBridge) window.AndroidBridge.requestTranslation(lastSpokenText);
         }
 
+        // KOTLIN'DEN GELEN SONUÇ
         window.displayTranslation = function(translatedText) {
             const box = document.getElementById("subtitle-box");
             box.innerText = translatedText;
             box.style.color = "#00FF00";
             document.getElementById("trans-btn").innerText = "ÇEVİR";
+            
+            // Agora üzerinden karşıya gönder
             const msg = new TextEncoder().encode(translatedText);
-            client.sendStreamMessage(msg).catch(e => console.error(e));
+            client.sendStreamMessage(msg).catch(err => console.log(err));
         };
 
         async function leaveCall() {
