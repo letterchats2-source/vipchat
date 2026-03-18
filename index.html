@@ -71,28 +71,23 @@
         });
 
         async function startCall() {
-            const btn = document.getElementById("start-btn");
-            btn.disabled = true;
-            btn.innerText = "Bağlanıyor...";
-            
-            try {
-                // Kamera aç
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({
-                    encoderConfig: { width: 320, height: 240, frameRate: 15 } // Çok düşük ayar
-                });
+    const btn = document.getElementById("start-btn");
+    try {
+        // Agora Join
+        await client.join(options.appId, options.channel, null, null);
+        
+        // Kamera (Infinix Fix: Bazı cihazlar 240p'de hata verir, standart açalım)
+        localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
 
-                await client.join(options.appId, options.channel, null, null);
-                await client.publish(localTracks.videoTrack);
-                
-                localTracks.videoTrack.play("local-player");
-                document.getElementById("overlay").style.display = "none";
-                document.getElementById("subtitle-box").innerText = "Sisteme giriş yapıldı. Konuşabilirsiniz.";
-            } catch (err) {
-                alert("Bağlantı hatası: " + err.message);
-                btn.disabled = false;
-                btn.innerText = "GÖRÜŞMEYİ BAŞLAT";
-            }
-        }
+        await client.publish(localTracks.videoTrack);
+        localTracks.videoTrack.play("local-player");
+        
+        document.getElementById("overlay").style.display = "none";
+    } catch (err) {
+        alert("AGORA HATASI: " + err.message); // Hatanın ne olduğunu telefonda göreceğiz
+        btn.innerText = "TEKRAR DENE";
+    }
+}
 
         async function manualTranslate() {
     if (!lastSpokenText) return;
