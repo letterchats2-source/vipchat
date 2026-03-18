@@ -6,44 +6,45 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #111; color: white; font-family: sans-serif; }
+        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         #remote-player { position: fixed; width: 100vw; height: 100vh; background: #000; z-index: 1; top:0; left:0; }
-        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 10px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
-        #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
-        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; }
+        #local-player { position: fixed; width: 110px; height: 150px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.7); padding: 15px; font-size: 19px; border-radius: 15px; color: #fff; z-index: 100; min-height: 35px; border: 1px solid #444; }
+        #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 30px; z-index: 200; }
+        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
+        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; }
-        .join-btn { padding: 20px 40px; font-size: 20px; background: #28a745; color: white; border-radius: 10px; cursor: pointer; border: none; font-weight: bold; }
+        .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border-radius: 15px; cursor: pointer; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
+    <div id="overlay"><button id="main-btn" class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
-    <div id="subtitle-box">Duyulan metin burada...</div>
+    <div id="subtitle-box">Hazır. Konuşabilirsiniz...</div>
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
-        <button class="btn-end" onclick="leaveCall()">✕</button>
+        <button id="end-btn" class="btn-end" onclick="leaveCall()">✕</button>
     </div>
 
     <script>
+        // Değişkenleri en başta tanımlıyoruz (Initialization hatası almamak için)
+        var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        var localTracks = { videoTrack: null };
+        var lastSpokenText = "";
+        
         const urlParams = new URLSearchParams(window.location.search);
         const options = {
             appId: "fc667e2e21154602bba044359e5771a9",
-            channel: urlParams.get("channel")
+            channel: urlParams.get("channel") || "test"
         };
 
-        let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        let localTracks = { videoTrack: null };
-        let lastSpokenText = "";
-
-        // 1. Karşıdan gelen çeviri mesajı
+        // Karşıdan gelen çeviri mesajı
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             const box = document.getElementById("subtitle-box");
             box.innerText = text;
-            box.style.color = "#00FF00";
+            box.style.color = "#00FF00"; // Karşı tarafın çevirisi YEŞİL
         });
 
         client.on("user-published", async (user, mediaType) => {
@@ -53,45 +54,76 @@
         });
 
         async function startCall() {
-            document.getElementById("overlay").style.display = "none";
+            const btn = document.getElementById("main-btn");
+            btn.disabled = true;
+            btn.innerText = "BAĞLANIYOR...";
+
             try {
+                // Kamera tracks oluştur
+                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({
+                    encoderConfig: "240p_1" // Infinix GPU Fix
+                });
+
+                // Kanala katıl
                 await client.join(options.appId, options.channel, null, null);
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                localTracks.videoTrack.play("local-player");
+                
+                // Yayını başlat
                 await client.publish(localTracks.videoTrack);
-            } catch (e) { alert("Giriş hatası: " + e.message); }
+                localTracks.videoTrack.play("local-player");
+
+                // Overlay'i kapat
+                document.getElementById("overlay").style.display = "none";
+                console.log("Agora Bağlantısı Başarılı");
+            } catch (err) {
+                alert("Bağlantı Hatası: " + err.message);
+                btn.disabled = false;
+                btn.innerText = "GÖRÜŞMEYİ BAŞLAT";
+            }
         }
 
+        // Android'den metin gelince buraya düşer
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
-            document.getElementById("subtitle-box").innerText = text;
-            document.getElementById("subtitle-box").style.color = "#fff";
+            const box = document.getElementById("subtitle-box");
+            box.innerText = text;
+            box.style.color = "#fff"; // Duyulan metin BEYAZ
         };
 
         window.receivePartialFromAndroid = function(text) {
             document.getElementById("subtitle-box").innerText = "..." + text;
         };
 
+        // ÇEVİR butonuna basınca Android'deki Gemini/HF motorunu tetikler
         function manualTranslate() {
-            if (!lastSpokenText) return;
+            if (!lastSpokenText) {
+                alert("Henüz bir şey konuşmadınız.");
+                return;
+            }
             document.getElementById("trans-btn").innerText = "⏳";
-            if (window.AndroidBridge) window.AndroidBridge.requestTranslation(lastSpokenText);
+            if (window.AndroidBridge) {
+                window.AndroidBridge.requestTranslation(lastSpokenText);
+            }
         }
 
-        // KOTLIN'DEN GELEN SONUÇ
+        // Android çeviri sonucunu buraya fırlatır
         window.displayTranslation = function(translatedText) {
             const box = document.getElementById("subtitle-box");
-            box.innerText = translatedText;
-            box.style.color = "#00FF00";
-            document.getElementById("trans-btn").innerText = "ÇEVİR";
+            const btn = document.getElementById("trans-btn");
             
+            box.innerText = translatedText;
+            box.style.color = "#00FF00"; // Çeviri sonucu YEŞİL
+            btn.innerText = "ÇEVİR";
+
             // Agora üzerinden karşıya gönder
             const msg = new TextEncoder().encode(translatedText);
-            client.sendStreamMessage(msg).catch(err => console.log(err));
+            client.sendStreamMessage(msg).catch(e => console.error("Agora Mesaj Hatası:", e));
         };
 
         async function leaveCall() {
-            if (localTracks.videoTrack) { localTracks.videoTrack.stop(); localTracks.videoTrack.close(); }
+            if (localTracks.videoTrack) {
+                localTracks.videoTrack.stop();
+                localTracks.videoTrack.close();
+            }
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
