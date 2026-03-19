@@ -10,15 +10,15 @@
         #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
         #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
         
-        /* Sesli Görüşme Profil Resmi */
+        /* Sesli Görüşme Profil Alanı */
         #profile-overlay { 
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
-            background: radial-gradient(circle, #333 0%, #000 100%); 
+            background: radial-gradient(circle, #444 0%, #000 100%); 
             display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 5; 
         }
-        #profile-img { width: 150px; height: 150px; border-radius: 50%; border: 5px solid #FF9800; object-fit: cover; margin-bottom: 20px; }
+        #profile-img { width: 160px; height: 160px; border-radius: 50%; border: 4px solid #FF9800; margin-bottom: 20px; }
 
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.7); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.7); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; }
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
         .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
         .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
@@ -28,13 +28,12 @@
     </style>
 </head>
 <body>
-    <!-- Sadece Global modda görünecek giriş ekranı -->
-    <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
+    <!-- Sadece Global modda görünecek -->
+    <div id="overlay"><button id="start-btn" class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     
-    <!-- Sesli Mod İçin Profil Ekranı -->
     <div id="profile-overlay">
-        <img id="profile-img" src="https://ui-avatars.com/api/?name=User&background=random&size=256" alt="Profile">
-        <div id="caller-name">Sesli Görüşme...</div>
+        <img id="profile-img" src="https://ui-avatars.com/api/?name=VIP&background=random&size=256" alt="Profile">
+        <h2>Sesli Görüşme</h2>
     </div>
 
     <div id="remote-player"></div>
@@ -55,25 +54,23 @@
         var localTracks = { videoTrack: null, audioTrack: null };
         var lastSpokenText = "";
 
-        // MOD AYARLARI
+        // MODA GÖRE UI AYARLARI
         if (mode !== "global") {
             document.getElementById("overlay").style.display = "none";
             document.getElementById("trans-btn").style.display = "none";
             document.getElementById("subtitle-box").style.display = "none";
-            // Otomatik Başlat (Video ve Audio için)
-            setTimeout(() => { startCall(); }, 1000);
+            // Global dışındaki modlar otomatik başlasın
+            setTimeout(() => { startCall(); }, 500);
         }
         if (mode === "audio") {
             document.getElementById("local-player").style.display = "none";
             document.getElementById("profile-overlay").style.display = "flex";
         }
 
-        // AGORA MESAJ VE SES DİNLEME
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             const box = document.getElementById("subtitle-box");
-            box.innerText = text;
-            box.style.color = "#00FF00";
+            box.innerText = text; box.style.display = "block"; box.style.color = "#00FF00";
         });
 
         client.on("user-published", async (user, mediaType) => {
@@ -84,27 +81,26 @@
 
         async function startCall() {
             try {
-                // SESİN GİTMESİ İÇİN MİKROFONU AÇIYORUZ
+                // SES HER MODDA AKTİF
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
                 
+                await client.join(options.appId, options.channel, null, null);
+
                 if (mode !== "audio") {
                     localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                     localTracks.videoTrack.play("local-player");
-                    await client.join(options.appId, options.channel, null, null);
                     await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
                 } else {
-                    await client.join(options.appId, options.channel, null, null);
                     await client.publish([localTracks.audioTrack]);
                 }
                 document.getElementById("overlay").style.display = "none";
-            } catch (e) { console.error("Agora Hatası:", e); }
+            } catch (e) { console.log(e); }
         }
 
-        // ANDROID KÖPRÜLERİ
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
-            document.getElementById("subtitle-box").innerText = text;
-            document.getElementById("subtitle-box").style.color = "#fff";
+            const box = document.getElementById("subtitle-box");
+            box.innerText = text; box.style.color = "#fff";
         };
 
         window.receivePartialFromAndroid = function(text) {
@@ -119,8 +115,7 @@
 
         window.displayTranslation = function(translatedText) {
             const box = document.getElementById("subtitle-box");
-            box.innerText = translatedText;
-            box.style.color = "#00FF00";
+            box.innerText = translatedText; box.style.color = "#00FF00";
             document.getElementById("trans-btn").innerText = "ÇEVİR";
             const msg = new TextEncoder().encode(translatedText);
             client.sendStreamMessage(msg).catch(e => console.log(e));
