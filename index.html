@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
-        .v-box { flex: 1; width: 100%; border-bottom: 1px solid #333; position: relative; }
+        body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        .v-box { flex: 1; width: 100%; position: relative; background: #111; border-bottom: 1px solid #333; }
         #remote-player, #local-player { width: 100%; height: 100%; object-fit: cover; }
         #controls, #overlay, #subtitle-box { display: none !important; }
     </style>
@@ -16,11 +16,11 @@
     <div class="v-box"><div id="local-player"></div></div>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get("mode") || "global"; // "audio", "camera" veya "global"
         const options = { appId: "fc667e2e21154602bba044359e5771a9", channel: urlParams.get("channel") || "test" };
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null, audioTrack: null };
 
-        // 🔥 GÖRÜNTÜYÜ OTOMATİK BAŞLATIR
         window.onload = () => { startCall(); };
 
         client.on("user-published", async (user, mediaType) => {
@@ -30,38 +30,37 @@
         });
 
         async function startCall() {
-    try {
-        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        
-        // Eğer mod audio değilse kamera aç
-        if (mode !== "audio") {
-            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-            localTracks.videoTrack.play("local-player");
-            await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-        } else {
-            // Sadece ses yayınla
-            await client.publish([localTracks.audioTrack]);
+            try {
+                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                
+                // 🔥 KRİTİK: Sadece audio değilse kamera aç
+                if (mode !== "audio") {
+                    localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+                    localTracks.videoTrack.play("local-player");
+                    await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                } else {
+                    await client.publish([localTracks.audioTrack]);
+                }
+                
+                await client.join(options.appId, options.channel, null, null);
+            } catch (e) { console.error("Agora Error:", e); }
         }
-        
-        await client.join(options.appId, options.channel, null, null);
-    } catch (e) { console.error("Bağlantı Hatası:", e); }
-}
 
         window.displayTranslation = (text) => {
             client.sendStreamMessage(new TextEncoder().encode(text));
+            if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async () => {
-            const devs = await AgoraRTC.getCameras();
-            await localTracks.videoTrack.setDevice(devs[1].deviceId);
-        };
-
-        window.muteAudio = () => {
-            const state = localTracks.audioTrack.enabled;
-            localTracks.audioTrack.setEnabled(!state);
+            if (localTracks.videoTrack) {
+                const devs = await AgoraRTC.getCameras();
+                if(devs.length > 1) await localTracks.videoTrack.setDevice(devs[1].deviceId);
+            }
         };
 
         async function leaveCall() {
+            if (localTracks.videoTrack) localTracks.videoTrack.close();
+            if (localTracks.audioTrack) localTracks.audioTrack.close();
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
