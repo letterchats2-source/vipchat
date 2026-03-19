@@ -1,36 +1,21 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* EKRANI İKİYE BÖLEN KAPLAR */
-        .video-wrapper { flex: 1; position: relative; width: 100%; border-bottom: 2px solid #222; overflow: hidden; background: #111; }
+        body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        /* 50/50 Bölünmüş Ekran (Stacked) */
+        .video-box { flex: 1; position: relative; width: 100%; border-bottom: 2px solid #333; overflow: hidden; }
         #remote-player, #local-player { width: 100%; height: 100%; object-fit: cover; }
-
-        /* İSİM ETİKETLERİ (Resimdeki gibi) */
-        .name-label { position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 20px; font-size: 14px; z-index: 100; }
-        
-        /* HTML BUTONLARINI TAMAMEN GİZLE (Android Native kullanacağız) */
+        /* Gereksiz her şeyi gizle, Android Native butonlarını kullanacağız */
         #controls, #overlay, #subtitle-box { display: none !important; }
     </style>
 </head>
 <body>
-    <!-- ÜSTTE KARŞI TARAF -->
-    <div class="video-wrapper">
-        <div id="remote-player"></div>
-        <div class="name-label">Katılımcı</div>
-    </div>
-
-    <!-- ALTTA SEN -->
-    <div class="video-wrapper">
-        <div id="local-player"></div>
-        <div class="name-label">Sen (VIP)</div>
-    </div>
+    <div class="video-box"><div id="remote-player"></div></div>
+    <div class="video-box"><div id="local-player"></div></div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
@@ -38,7 +23,8 @@
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null, audioTrack: null };
 
-        window.onload = () => { setTimeout(() => { startCall(); }, 500); };
+        // OTOMATİK BAŞLAT (Android'e girer girmez)
+        window.onload = () => { startCall(); };
 
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
@@ -48,31 +34,24 @@
 
         async function startCall() {
             try {
-                // Mikrofon ve Kamera track'lerini oluştur
-                const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
-                    {}, { encoderConfig: "240p_1" }
-                );
-                localTracks.audioTrack = audioTrack;
-                localTracks.videoTrack = videoTrack;
+                // Kamera ve Mikrofonu aynı anda al
+                const [audio, video] = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
+                localTracks.audioTrack = audio;
+                localTracks.videoTrack = video;
                 
                 await client.join(options.appId, options.channel, null, null);
                 localTracks.videoTrack.play("local-player");
                 await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-            } catch (e) { console.error("StartCall Hatası:", e); }
+            } catch (e) { console.error("Agora Hatası:", e); }
         }
 
-        // Kamera Değiştirme Fonksiyonu
-        window.switchCamera = async function() {
-            if (localTracks.videoTrack) {
-                const devs = await AgoraRTC.getCameras();
-                const currId = localTracks.videoTrack.getMediaStreamTrack().settings().deviceId;
-                const nextDev = devs.find(d => d.deviceId !== currId) || devs[0];
-                await localTracks.videoTrack.setDevice(nextDev.deviceId);
-            }
+        window.displayTranslation = (text) => {
+            client.sendStreamMessage(new TextEncoder().encode(text));
         };
 
-        window.displayTranslation = function(text) {
-            client.sendStreamMessage(new TextEncoder().encode(text));
+        window.switchCamera = async () => {
+            const devs = await AgoraRTC.getCameras();
+            if (devs.length > 1) await localTracks.videoTrack.setDevice(devs[1].deviceId);
         };
 
         async function leaveCall() {
