@@ -6,10 +6,10 @@
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        #remote-player { position: fixed; width: 100vw; height: 100vh; z-index: 1; }
-        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; }
-        /* HTML Butonlarını ve Gereksiz Kutuları Gizle (Native Kullanıyoruz) */
+        body { margin: 0; background: transparent; overflow: hidden; }
+        #remote-player { position: fixed; width: 100vw; height: 100vh; z-index: 1; top:0; left:0; background: #000; }
+        #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
+        /* HTML butonlarını tamamen yok et */
         #controls, #overlay, #subtitle-box { display: none !important; }
     </style>
 </head>
@@ -23,14 +23,8 @@
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null, audioTrack: null };
 
-        // OTOMATİK BAŞLAT
-        window.onload = () => { setTimeout(() => { startCall(); }, 500); };
-
-        client.on("stream-message", (uid, data) => {
-            const text = new TextDecoder().decode(data);
-            // Karşıdan gelen mesajı Android tarafına bildir (Altyazı için)
-            if(window.AndroidBridge) window.AndroidBridge.requestTranslation(text); 
-        });
+        // Sayfa yüklenir yüklenmez otomatik başlat
+        window.onload = () => { startCall(); };
 
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
@@ -40,26 +34,30 @@
 
         async function startCall() {
             try {
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                // ÖNEMLİ: Mikrofonu alırken hata oluşursa videoyu yine de başlat
+                try {
+                    localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                } catch(e) { console.log("Mikrofon hatası, sadece video deneniyor"); }
+                
                 localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                 await client.join(options.appId, options.channel, null, null);
                 localTracks.videoTrack.play("local-player");
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-            } catch (e) { console.error(e); }
+                
+                let tracks = [];
+                if(localTracks.audioTrack) tracks.push(localTracks.audioTrack);
+                if(localTracks.videoTrack) tracks.push(localTracks.videoTrack);
+                await client.publish(tracks);
+            } catch (e) { console.error("StartCall Hatası:", e); }
         }
 
         window.displayTranslation = function(text) {
-            // Android'den gelen çeviriyi karşıya fırlat
             client.sendStreamMessage(new TextEncoder().encode(text));
-            if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async function() {
             if (localTracks.videoTrack) {
                 const devs = await AgoraRTC.getCameras();
-                if(devs.length > 1) {
-                    await localTracks.videoTrack.setDevice(localTracks.videoTrack.getTrackLabel() === devs[0].label ? devs[1].deviceId : devs[0].deviceId);
-                }
+                await localTracks.videoTrack.setDevice(devs[1].deviceId);
             }
         };
 
