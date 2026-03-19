@@ -1,30 +1,26 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
-        /* Görüntüleri Alt Alta (50/50) Böl */
-        .video-box { flex: 1; position: relative; width: 100%; height: 50%; background: #111; border-bottom: 1px solid #333; }
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        .v-box { flex: 1; width: 100%; border-bottom: 1px solid #333; position: relative; }
         #remote-player, #local-player { width: 100%; height: 100%; object-fit: cover; }
-        /* Gereksiz her şeyi gizle */
         #controls, #overlay, #subtitle-box { display: none !important; }
     </style>
 </head>
 <body>
-    <div class="video-box"><div id="remote-player"></div></div>
-    <div class="video-box"><div id="local-player"></div></div>
-
+    <div class="v-box"><div id="remote-player"></div></div>
+    <div class="v-box"><div id="local-player"></div></div>
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const options = { appId: "fc667e2e21154602bba044359e5771a9", channel: urlParams.get("channel") || "test" };
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null, audioTrack: null };
 
-        // OTOMATİK BAŞLAT (Tıklama beklemeyi kaldırdık)
+        // 🔥 GÖRÜNTÜYÜ OTOMATİK BAŞLATIR
         window.onload = () => { startCall(); };
 
         client.on("user-published", async (user, mediaType) => {
@@ -34,28 +30,28 @@
         });
 
         async function startCall() {
-            try {
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                await client.join(options.appId, options.channel, null, null);
-                localTracks.videoTrack.play("local-player");
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-            } catch (e) { console.error("Agora Hatası:", e); }
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+            await client.join(options.appId, options.channel, null, null);
+            localTracks.videoTrack.play("local-player");
+            await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
         }
 
         window.displayTranslation = (text) => {
             client.sendStreamMessage(new TextEncoder().encode(text));
-            if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async () => {
             const devs = await AgoraRTC.getCameras();
-            if (devs.length > 1) await localTracks.videoTrack.setDevice(devs[1].deviceId);
+            await localTracks.videoTrack.setDevice(devs[1].deviceId);
+        };
+
+        window.muteAudio = () => {
+            const state = localTracks.audioTrack.enabled;
+            localTracks.audioTrack.setEnabled(!state);
         };
 
         async function leaveCall() {
-            if (localTracks.videoTrack) localTracks.videoTrack.close();
-            if (localTracks.audioTrack) localTracks.audioTrack.close();
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
