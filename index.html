@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
-        /* 50/50 Bölünmüş Ekran (Stacked) */
-        .video-box { flex: 1; position: relative; width: 100%; border-bottom: 2px solid #333; overflow: hidden; }
+        /* Görüntüleri Alt Alta (50/50) Böl */
+        .video-box { flex: 1; position: relative; width: 100%; height: 50%; background: #111; border-bottom: 1px solid #333; }
         #remote-player, #local-player { width: 100%; height: 100%; object-fit: cover; }
-        /* Gereksiz her şeyi gizle, Android Native butonlarını kullanacağız */
+        /* Gereksiz her şeyi gizle */
         #controls, #overlay, #subtitle-box { display: none !important; }
     </style>
 </head>
@@ -23,7 +24,7 @@
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null, audioTrack: null };
 
-        // OTOMATİK BAŞLAT (Android'e girer girmez)
+        // OTOMATİK BAŞLAT (Tıklama beklemeyi kaldırdık)
         window.onload = () => { startCall(); };
 
         client.on("user-published", async (user, mediaType) => {
@@ -34,11 +35,8 @@
 
         async function startCall() {
             try {
-                // Kamera ve Mikrofonu aynı anda al
-                const [audio, video] = await AgoraRTC.createMicrophoneAndCameraTracks({}, {encoderConfig: "240p_1"});
-                localTracks.audioTrack = audio;
-                localTracks.videoTrack = video;
-                
+                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                 await client.join(options.appId, options.channel, null, null);
                 localTracks.videoTrack.play("local-player");
                 await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
@@ -47,6 +45,7 @@
 
         window.displayTranslation = (text) => {
             client.sendStreamMessage(new TextEncoder().encode(text));
+            if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async () => {
