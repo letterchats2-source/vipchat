@@ -68,21 +68,29 @@
         });
 
         async function startCall() {
-            document.getElementById("overlay").style.display = "none";
-            try {
-                // MİKROFONU AÇ
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                await client.join(options.appId, options.channel, null, null);
+    document.getElementById("overlay").style.display = "none";
+    try {
+        await client.join(options.appId, options.channel, null, null);
+        
+        // GLOBAL MODDA AGORA MİKROFONUNU 2 SANİYE GEÇ BAŞLAT
+        // Böylece Android STT mikrofonu önceden rezerve eder
+        const micDelay = (mode === "global") ? 2000 : 0;
 
-                if (mode !== "audio") {
-                    localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                    localTracks.videoTrack.play("local-player");
-                    await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-                } else {
-                    await client.publish([localTracks.audioTrack]);
-                }
-            } catch (err) { console.log(err); }
-        }
+        setTimeout(async () => {
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            
+            if (mode !== "audio") {
+                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+                localTracks.videoTrack.play("local-player");
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+            } else {
+                await client.publish([localTracks.audioTrack]);
+            }
+            console.log("Agora ses ve görüntü yayını başladı.");
+        }, micDelay);
+
+    } catch (err) { alert("Agora hatası: " + err.message); }
+}
 
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
