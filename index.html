@@ -5,15 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
-    <!-- Beyaz Ahize İkonu İçin -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
         #remote-player { position: fixed; width: 100vw; height: 100vh; background: #000; z-index: 1; top:0; left:0; }
         #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; display: none;}
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; display:none; }
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
-        
         .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
         
         /* KIRMIZI FON BEYAZ AHİZE BUTONU */
@@ -28,14 +26,13 @@
     </style>
 </head>
 <body>
-    <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
+    <div id="overlay"><button id="main-btn" class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
     <div id="subtitle-box">Metin bekleniyor...</div>
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
-        <!-- Beyaz Ahize İkonu Eklendi -->
-        <button class="btn-end" onclick="leaveCall()"><i class="fa-solid fa-phone-slash"></i></button>
+        <button id="end-btn" class="btn-end" onclick="leaveCall()"><i class="fa-solid fa-phone-slash"></i></button>
     </div>
 
     <script>
@@ -47,20 +44,21 @@
         var localTracks = { videoTrack: null, audioTrack: null };
         var lastSpokenText = "";
 
-        // MODA GÖRE UI GİZLE/GÖSTER
         if (mode !== "global") {
             document.getElementById("overlay").style.display = "none";
             document.getElementById("trans-btn").style.display = "none";
             document.getElementById("subtitle-box").style.display = "none";
-            setTimeout(() => { startCall(); }, 1000); // Direkt başlat
+            // Direkt başlat
+            setTimeout(() => { startCall(); }, 1500); 
         } else {
             document.getElementById("subtitle-box").style.display = "block";
         }
 
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
-            document.getElementById("subtitle-box").innerText = text;
-            document.getElementById("subtitle-box").style.color = "#00FF00";
+            const box = document.getElementById("subtitle-box");
+            box.innerText = text;
+            box.style.color = "#00FF00";
         });
 
         client.on("user-published", async (user, mediaType) => {
@@ -70,32 +68,27 @@
         });
 
         async function startCall() {
-    try {
-        await client.join(options.appId, options.channel, null, null);
-        
-        // SES HER MODDA AKTİF
-        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-        
-        if (mode === "global") {
-            // GLOBAL MODDA HİLE: Mikrofonu aç ama 2 saniye sonra STT'ye yol vermek için sustur (veya STT'den sonra aç)
-            // En sağlamı: Global modda Agora'nın mikrofon sesini biraz kısık başlatmak veya STT onError'da tekrar dinlemeyi zorlamak
-        }
+            document.getElementById("overlay").style.display = "none";
+            try {
+                // MİKROFONU AÇ
+                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                await client.join(options.appId, options.channel, null, null);
 
-        if (mode !== "audio") {
-            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-            localTracks.videoTrack.play("local-player");
-            await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-        } else {
-            await client.publish([localTracks.audioTrack]);
+                if (mode !== "audio") {
+                    localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+                    localTracks.videoTrack.play("local-player");
+                    await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                } else {
+                    await client.publish([localTracks.audioTrack]);
+                }
+            } catch (err) { console.log(err); }
         }
-        document.getElementById("overlay").style.display = "none";
-    } catch (e) { console.log(e); }
-}
 
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
-            document.getElementById("subtitle-box").innerText = text;
-            document.getElementById("subtitle-box").style.color = "#fff";
+            const box = document.getElementById("subtitle-box");
+            box.innerText = text;
+            box.style.color = "#fff";
         };
 
         window.receivePartialFromAndroid = function(text) {
@@ -113,7 +106,8 @@
             box.innerText = translatedText;
             box.style.color = "#00FF00";
             document.getElementById("trans-btn").innerText = "ÇEVİR";
-            client.sendStreamMessage(new TextEncoder().encode(translatedText));
+            const msg = new TextEncoder().encode(translatedText);
+            client.sendStreamMessage(msg);
         };
 
         async function leaveCall() {
