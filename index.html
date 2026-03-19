@@ -30,12 +30,22 @@
         });
 
         async function startCall() {
-            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+    try {
+        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        
+        // Eğer mod audio değilse kamera aç
+        if (mode !== "audio") {
             localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-            await client.join(options.appId, options.channel, null, null);
             localTracks.videoTrack.play("local-player");
             await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+        } else {
+            // Sadece ses yayınla
+            await client.publish([localTracks.audioTrack]);
         }
+        
+        await client.join(options.appId, options.channel, null, null);
+    } catch (e) { console.error("Bağlantı Hatası:", e); }
+}
 
         window.displayTranslation = (text) => {
             client.sendStreamMessage(new TextEncoder().encode(text));
