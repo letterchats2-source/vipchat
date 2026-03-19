@@ -5,44 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>TranslateTalk VIP</title>
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
+    <!-- Beyaz Ahize İkonu İçin -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
+        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #000; z-index: 1; top:0; left:0; }
         #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        
-        /* Sesli Görüşme Profil Alanı */
-        #profile-overlay { 
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
-            background: radial-gradient(circle, #444 0%, #000 100%); 
-            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 5; 
-        }
-        #profile-img { width: 160px; height: 160px; border-radius: 50%; border: 4px solid #FF9800; margin-bottom: 20px; }
-
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.7); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.8); padding: 12px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; display: none;}
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
-        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
-        .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
         
+        .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
+        
+        /* KIRMIZI FON BEYAZ AHİZE BUTONU */
+        .btn-end { 
+            width: 75px; height: 75px; background: #FF3B30; border-radius: 50%; 
+            border: 4px solid #fff; color: white; font-size: 30px; 
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; align-items: center; justify-content: center; z-index: 9999; }
         .join-btn { padding: 20px 50px; font-size: 22px; background: #28a745; color: white; border-radius: 10px; cursor: pointer; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <!-- Sadece Global modda görünecek -->
-    <div id="overlay"><button id="start-btn" class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
-    
-    <div id="profile-overlay">
-        <img id="profile-img" src="https://ui-avatars.com/api/?name=VIP&background=random&size=256" alt="Profile">
-        <h2>Sesli Görüşme</h2>
-    </div>
-
+    <div id="overlay"><button class="join-btn" onclick="startCall()">GÖRÜŞMEYİ BAŞLAT</button></div>
     <div id="remote-player"></div>
     <div id="local-player"></div>
     <div id="subtitle-box">Metin bekleniyor...</div>
-
     <div id="controls">
         <button id="trans-btn" class="btn-translate" onclick="manualTranslate()">ÇEVİR</button>
-        <button class="btn-end" onclick="leaveCall()">✕</button>
+        <!-- Beyaz Ahize İkonu Eklendi -->
+        <button class="btn-end" onclick="leaveCall()"><i class="fa-solid fa-phone-slash"></i></button>
     </div>
 
     <script>
@@ -54,38 +47,36 @@
         var localTracks = { videoTrack: null, audioTrack: null };
         var lastSpokenText = "";
 
-        // MODA GÖRE UI AYARLARI
+        // MODA GÖRE UI GİZLE/GÖSTER
         if (mode !== "global") {
             document.getElementById("overlay").style.display = "none";
             document.getElementById("trans-btn").style.display = "none";
             document.getElementById("subtitle-box").style.display = "none";
-            // Global dışındaki modlar otomatik başlasın
-            setTimeout(() => { startCall(); }, 500);
-        }
-        if (mode === "audio") {
-            document.getElementById("local-player").style.display = "none";
-            document.getElementById("profile-overlay").style.display = "flex";
+            setTimeout(() => { startCall(); }, 1000); // Direkt başlat
+        } else {
+            document.getElementById("subtitle-box").style.display = "block";
         }
 
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
-            const box = document.getElementById("subtitle-box");
-            box.innerText = text; box.style.display = "block"; box.style.color = "#00FF00";
+            document.getElementById("subtitle-box").innerText = text;
+            document.getElementById("subtitle-box").style.color = "#00FF00";
         });
 
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video" && mode !== "audio") user.videoTrack.play("remote-player");
+            if (mediaType === "video") user.videoTrack.play("remote-player");
             if (mediaType === "audio") user.audioTrack.play();
         });
 
         async function startCall() {
+            document.getElementById("overlay").style.display = "none";
             try {
-                // SES HER MODDA AKTİF
+                await client.join(options.appId, options.channel, null, null);
+                
+                // MİKROFONU AÇ (Sesli iletişim için)
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
                 
-                await client.join(options.appId, options.channel, null, null);
-
                 if (mode !== "audio") {
                     localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                     localTracks.videoTrack.play("local-player");
@@ -93,14 +84,13 @@
                 } else {
                     await client.publish([localTracks.audioTrack]);
                 }
-                document.getElementById("overlay").style.display = "none";
             } catch (e) { console.log(e); }
         }
 
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
-            const box = document.getElementById("subtitle-box");
-            box.innerText = text; box.style.color = "#fff";
+            document.getElementById("subtitle-box").innerText = text;
+            document.getElementById("subtitle-box").style.color = "#fff";
         };
 
         window.receivePartialFromAndroid = function(text) {
@@ -115,10 +105,10 @@
 
         window.displayTranslation = function(translatedText) {
             const box = document.getElementById("subtitle-box");
-            box.innerText = translatedText; box.style.color = "#00FF00";
+            box.innerText = translatedText;
+            box.style.color = "#00FF00";
             document.getElementById("trans-btn").innerText = "ÇEVİR";
-            const msg = new TextEncoder().encode(translatedText);
-            client.sendStreamMessage(msg).catch(e => console.log(e));
+            client.sendStreamMessage(new TextEncoder().encode(translatedText));
         };
 
         async function leaveCall() {
