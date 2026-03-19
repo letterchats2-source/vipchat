@@ -70,22 +70,27 @@
         });
 
         async function startCall() {
-            document.getElementById("overlay").style.display = "none";
-            try {
-                await client.join(options.appId, options.channel, null, null);
-                
-                // MİKROFONU AÇ (Sesli iletişim için)
-                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                
-                if (mode !== "audio") {
-                    localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                    localTracks.videoTrack.play("local-player");
-                    await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-                } else {
-                    await client.publish([localTracks.audioTrack]);
-                }
-            } catch (e) { console.log(e); }
+    try {
+        await client.join(options.appId, options.channel, null, null);
+        
+        // SES HER MODDA AKTİF
+        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        
+        if (mode === "global") {
+            // GLOBAL MODDA HİLE: Mikrofonu aç ama 2 saniye sonra STT'ye yol vermek için sustur (veya STT'den sonra aç)
+            // En sağlamı: Global modda Agora'nın mikrofon sesini biraz kısık başlatmak veya STT onError'da tekrar dinlemeyi zorlamak
         }
+
+        if (mode !== "audio") {
+            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+            localTracks.videoTrack.play("local-player");
+            await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+        } else {
+            await client.publish([localTracks.audioTrack]);
+        }
+        document.getElementById("overlay").style.display = "none";
+    } catch (e) { console.log(e); }
+}
 
         window.receiveFromAndroid = function(text) {
             lastSpokenText = text;
