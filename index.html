@@ -37,14 +37,22 @@
         var localTracks = { videoTrack: null, audioTrack: null };
         var lastSpokenText = "";
 
+        document.getElementById("overlay").style.display = "none"; // Giriş butonunu tamamen kaldır
+        
         if (mode !== "global") {
-            document.getElementById("overlay").style.display = "none";
+            // Normal Görüşme: Çeviri butonu ve Altyazı kutusunu gizle
             document.getElementById("trans-btn").style.display = "none";
             document.getElementById("subtitle-box").style.display = "none";
-            setTimeout(() => { startCall(); }, 1000); 
         } else {
+            // Global Görüşme: Altyazı kutusunu ve Butonu göster
             document.getElementById("subtitle-box").style.display = "block";
+            document.getElementById("trans-btn").style.display = "flex";
         }
+
+        // Her durumda görüşmeyi 500ms sonra otomatik başlat (Tıklama bekleme!)
+        setTimeout(() => { 
+            startCall(); 
+        }, 500);
 
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
