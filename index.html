@@ -7,9 +7,9 @@
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
         body { margin: 0; padding: 0; background: #000; color: white; font-family: sans-serif; overflow: hidden; }
-        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #000; z-index: 1; top:0; left:0; }
+        #remote-player { position: fixed; width: 100vw; height: 100vh; background: #111; z-index: 1; top:0; left:0; }
         #local-player { position: fixed; width: 100px; height: 140px; top: 20px; right: 20px; border-radius: 12px; border: 2px solid #fff; z-index: 10; background: #222; }
-        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 84%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
+        #subtitle-box { position: fixed; bottom: 130px; left: 5%; width: 90%; text-align: center; background: rgba(0,0,0,0.8); padding: 15px; font-size: 18px; border-radius: 10px; color: #fff; z-index: 100; min-height: 25px; }
         #controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: center; gap: 40px; z-index: 200; }
         .btn-translate { width: 80px; height: 80px; background: #FF9800; border-radius: 50%; border: 4px solid #fff; color: white; font-weight: bold; cursor: pointer; }
         .btn-end { width: 70px; height: 70px; background: #FF3B30; border-radius: 50%; border: 4px solid #fff; color: white; font-size: 30px; display: flex; align-items: center; justify-content: center; }
@@ -29,42 +29,70 @@
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
+        const mode = urlParams.get("mode") || "global"; // Android'den gelen mod
         const options = { appId: "fc667e2e21154602bba044359e5771a9", channel: urlParams.get("channel") || "test" };
+        
         var client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         var localTracks = { videoTrack: null };
         var lastSpokenText = "";
 
+        // MODA GÖRE UI GİZLE/GÖSTER
+        if (mode !== "global") {
+            document.getElementById("trans-btn").style.display = "none";
+            document.getElementById("subtitle-box").style.display = "none";
+        }
+        if (mode === "audio") {
+            document.getElementById("local-player").style.display = "none";
+        }
+
         client.on("stream-message", (uid, data) => {
-            const text = new TextDecoder().decode(data);
-            const box = document.getElementById("subtitle-box");
-            box.innerText = text;
-            box.style.color = "#00FF00";
+            if (mode === "global") {
+                const text = new TextDecoder().decode(data);
+                const box = document.getElementById("subtitle-box");
+                box.innerText = text;
+                box.style.color = "#00FF00";
+            }
         });
 
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video") user.videoTrack.play("remote-player");
-            if (mediaType === "audio") user.audioTrack.play();
+            if (mediaType === "video" && mode !== "audio") {
+                user.videoTrack.play("remote-player");
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
         });
 
         async function startCall() {
             document.getElementById("overlay").style.display = "none";
             try {
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                 await client.join(options.appId, options.channel, null, null);
-                await client.publish(localTracks.videoTrack);
-                localTracks.videoTrack.play("local-player");
-            } catch (e) { alert("Agora Hatası: " + e.message); }
+                
+                if (mode !== "audio") {
+                    // SADECE Görüntülü ve Global modda kamerayı aç
+                    localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+                    localTracks.videoTrack.play("local-player");
+                    await client.publish(localTracks.videoTrack);
+                } else {
+                    // Sesli modda kamera açma (Mikrofon Android Native'de)
+                    console.log("Sesli görüşme modu.");
+                }
+            } catch (e) { alert("Bağlantı hatası: " + e.message); }
         }
 
         window.receiveFromAndroid = function(text) {
-            lastSpokenText = text;
-            document.getElementById("subtitle-box").innerText = text;
-            document.getElementById("subtitle-box").style.color = "#fff";
+            if (mode === "global") {
+                lastSpokenText = text;
+                document.getElementById("subtitle-box").innerText = text;
+                document.getElementById("subtitle-box").style.color = "#fff";
+            }
         };
 
         window.receivePartialFromAndroid = function(text) {
-            document.getElementById("subtitle-box").innerText = "..." + text;
+            if (mode === "global") {
+                document.getElementById("subtitle-box").innerText = "..." + text;
+            }
         };
 
         function manualTranslate() {
