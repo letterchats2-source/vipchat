@@ -68,28 +68,38 @@
         });
 
         async function startCall() {
-    document.getElementById("overlay").style.display = "none";
+    const btn = document.getElementById("main-btn");
+    btn.disabled = true;
+    btn.innerText = "BAĞLANIYOR...";
+
     try {
         await client.join(options.appId, options.channel, null, null);
         
-        // GLOBAL MODDA AGORA MİKROFONUNU 2 SANİYE GEÇ BAŞLAT
-        // Böylece Android STT mikrofonu önceden rezerve eder
-        const micDelay = (mode === "global") ? 2000 : 0;
+        // Önce Görüntüyü hazırlayalım
+        if (mode !== "audio") {
+            localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
+            localTracks.videoTrack.play("local-player");
+        }
 
-        setTimeout(async () => {
-            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-            
-            if (mode !== "audio") {
-                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
-                localTracks.videoTrack.play("local-player");
-                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-            } else {
-                await client.publish([localTracks.audioTrack]);
-            }
-            console.log("Agora ses ve görüntü yayını başladı.");
-        }, micDelay);
+        // SESİ AÇALIM
+        localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+        
+        // YAYINI BAŞLAT
+        await client.publish(mode === "audio" ? [localTracks.audioTrack] : [localTracks.audioTrack, localTracks.videoTrack]);
 
-    } catch (err) { alert("Agora hatası: " + err.message); }
+        document.getElementById("overlay").style.display = "none";
+
+        // --- KRİTİK NOKTA ---
+        // Agora bağlandı, yayın başladı. Şimdi Android STT'yi uyandırıyoruz.
+        if (mode === "global" && window.AndroidBridge) {
+            window.AndroidBridge.startSTTNow();
+        }
+
+    } catch (err) {
+        alert("Giriş Hatası: " + err.message);
+        btn.disabled = false;
+        btn.innerText = "TEKRAR DENE";
+    }
 }
 
         window.receiveFromAndroid = function(text) {
