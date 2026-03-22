@@ -24,7 +24,6 @@
 
         window.onload = () => { startCall(); };
 
-        // KARŞIDAN GELEN ÇEVİRİYİ ANDROID'E GÖNDER
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             if(window.AndroidBridge) window.AndroidBridge.updateSubtitle(text);
@@ -54,7 +53,6 @@
             if (text && client) {
                 client.sendStreamMessage(new TextEncoder().encode(text));
             }
-            if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async () => {
