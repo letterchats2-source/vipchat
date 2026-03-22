@@ -24,7 +24,7 @@
 
         window.onload = () => { startCall(); };
 
-        // KARŞIDAN GELEN MESAJLARI (ÇEVİRİ) YAKALA
+        // KARŞIDAN GELEN ÇEVİRİYİ ANDROID'E GÖNDER
         client.on("stream-message", (uid, data) => {
             const text = new TextDecoder().decode(data);
             if(window.AndroidBridge) window.AndroidBridge.updateSubtitle(text);
@@ -43,20 +43,16 @@
                     localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                     localTracks.videoTrack.play("local-player");
                 }
-                
                 await client.join(options.appId, options.channel, null, null);
-                
-                let publishTracks = [localTracks.audioTrack];
-                if(localTracks.videoTrack) publishTracks.push(localTracks.videoTrack);
-                await client.publish(publishTracks);
+                let tracks = [localTracks.audioTrack];
+                if(localTracks.videoTrack) tracks.push(localTracks.videoTrack);
+                await client.publish(tracks);
             } catch (e) { console.error(e); }
         }
 
-        // 🔥 ANDROID'DEN GELEN ÇEVİRİYİ KARŞIYA GÖNDERME
         window.displayTranslation = (text) => {
             if (text && client) {
-                const msg = new TextEncoder().encode(text);
-                client.sendStreamMessage(msg);
+                client.sendStreamMessage(new TextEncoder().encode(text));
             }
             if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
@@ -71,8 +67,6 @@
         };
 
         async function leaveCall() {
-            if (localTracks.videoTrack) localTracks.videoTrack.close();
-            if (localTracks.audioTrack) localTracks.audioTrack.close();
             await client.leave();
             if (window.AndroidBridge) window.AndroidBridge.closeCall();
         }
