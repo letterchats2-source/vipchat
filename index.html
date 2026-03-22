@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"></script>
     <style>
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        body { margin: 0; padding: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         .v-box { flex: 1; width: 100%; position: relative; background: #111; border-bottom: 1px solid #333; }
         #remote-player, #local-player { width: 100%; height: 100%; object-fit: cover; }
         #controls, #overlay, #subtitle-box { display: none !important; }
@@ -24,40 +24,49 @@
 
         window.onload = () => { startCall(); };
 
+        // KARŞIDAN GELEN MESAJLARI (ÇEVİRİ) YAKALA
+        client.on("stream-message", (uid, data) => {
+            const text = new TextDecoder().decode(data);
+            if(window.AndroidBridge) window.AndroidBridge.updateSubtitle(text);
+        });
+
         client.on("user-published", async (user, mediaType) => {
             await client.subscribe(user, mediaType);
             if (mediaType === "video") user.videoTrack.play("remote-player");
-            if (mediaType === "audio") user.audioTrack.play(); // 🔥 Uzaktaki sesin otomatik çalmasını sağlar
+            if (mediaType === "audio") user.audioTrack.play();
         });
 
         async function startCall() {
             try {
-                // Sesi her zaman al
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                
-                // 🔥 TABLET FİX: Sadece video modunda kamera aç ve 240p_1 (düşük profil) kullan
                 if (mode !== "audio") {
                     localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack({ encoderConfig: "240p_1" });
                     localTracks.videoTrack.play("local-player");
-                    await client.join(options.appId, options.channel, null, null);
-                    await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
-                } else {
-                    // Sadece Sesli Mod
-                    await client.join(options.appId, options.channel, null, null);
-                    await client.publish([localTracks.audioTrack]);
                 }
-            } catch (e) { console.error("Agora Error:", e); }
+                
+                await client.join(options.appId, options.channel, null, null);
+                
+                let publishTracks = [localTracks.audioTrack];
+                if(localTracks.videoTrack) publishTracks.push(localTracks.videoTrack);
+                await client.publish(publishTracks);
+            } catch (e) { console.error(e); }
         }
 
+        // 🔥 ANDROID'DEN GELEN ÇEVİRİYİ KARŞIYA GÖNDERME
         window.displayTranslation = (text) => {
-            client.sendStreamMessage(new TextEncoder().encode(text));
+            if (text && client) {
+                const msg = new TextEncoder().encode(text);
+                client.sendStreamMessage(msg);
+            }
             if (localTracks.audioTrack) localTracks.audioTrack.setEnabled(true);
         };
 
         window.switchCamera = async () => {
             if (localTracks.videoTrack) {
                 const devs = await AgoraRTC.getCameras();
-                if(devs.length > 1) await localTracks.videoTrack.setDevice(devs[1].deviceId);
+                const curr = localTracks.videoTrack.getMediaStreamTrack().settings().deviceId;
+                const next = devs.find(d => d.deviceId !== curr) || devs[0];
+                await localTracks.videoTrack.setDevice(next.deviceId);
             }
         };
 
